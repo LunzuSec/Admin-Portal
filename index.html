@@ -98,6 +98,7 @@
             height: 100vh;
             box-shadow: 2px 0 10px rgba(0,0,0,0.1);
             overflow-y: auto;
+            z-index: 100;
         }
 
         .sidebar-header {
@@ -139,6 +140,7 @@
         .main-content {
             margin-left: 280px;
             padding: 20px;
+            min-height: 100vh;
         }
 
         .top-bar {
@@ -154,7 +156,7 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -174,12 +176,13 @@
         .stat-card h3 {
             color: #667eea;
             margin-bottom: 10px;
-            font-size: 14px;
+            font-size: 12px;
             text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .stat-card .value {
-            font-size: 32px;
+            font-size: 28px;
             font-weight: bold;
             color: #333;
         }
@@ -202,8 +205,6 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            overflow-x: auto;
-            display: block;
         }
 
         th, td {
@@ -225,8 +226,9 @@
         .badge {
             padding: 4px 8px;
             border-radius: 5px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: bold;
+            display: inline-block;
         }
 
         .badge-success {
@@ -256,16 +258,16 @@
         }
 
         .btn {
-            padding: 10px 20px;
+            padding: 8px 16px;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
             transition: opacity 0.2s;
         }
 
         .btn:hover {
-            opacity: 0.9;
+            opacity: 0.85;
         }
 
         .btn-primary {
@@ -285,7 +287,7 @@
 
         .btn-sm {
             padding: 5px 10px;
-            font-size: 12px;
+            font-size: 11px;
         }
 
         select, input {
@@ -300,6 +302,7 @@
             gap: 10px;
             margin-bottom: 20px;
             flex-wrap: wrap;
+            align-items: center;
         }
 
         @keyframes spin {
@@ -323,11 +326,45 @@
             cursor: pointer;
         }
 
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .page-btn {
+            padding: 5px 12px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .page-btn:hover:not(.active) {
+            background: #f0f0f0;
+        }
+
+        .fee-positive {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .fee-zero {
+            color: #28a745;
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
                 transition: transform 0.3s;
-                z-index: 1000;
             }
             .sidebar.open {
                 transform: translateX(0);
@@ -343,6 +380,13 @@
             }
             th, td {
                 padding: 8px;
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+            .stat-card .value {
+                font-size: 20px;
             }
         }
     </style>
@@ -425,9 +469,12 @@
         let authToken = null;
         let cache = new Map();
         let currentPage = 'dashboard';
+        let currentStudentPage = 1;
+        let currentStudentList = [];
+        const PAGE_SIZE = 20;
 
         // ============================================
-        // LOGIN FUNCTION - FIXED
+        // LOGIN FUNCTION
         // ============================================
         async function login() {
             const username = document.getElementById('username').value;
@@ -435,7 +482,6 @@
             const loginBtn = document.getElementById('loginBtn');
             const loginError = document.getElementById('loginError');
             
-            // Clear previous error
             loginError.textContent = '';
             
             if (!username || !password) {
@@ -443,26 +489,17 @@
                 return;
             }
             
-            // Show loading state
-            const originalText = loginBtn.textContent;
             loginBtn.textContent = 'Logging in...';
             loginBtn.disabled = true;
             
             try {
-                console.log('Attempting login for:', username);
-                
-                // Call the login action
                 const result = await apiCall('login', { username, password }, false);
-                
-                console.log('Login response:', result);
                 
                 if (result && result.success) {
                     authToken = result.authToken;
-                    loginError.textContent = '';
                     loginError.className = 'success-message';
                     loginError.textContent = 'Login successful! Redirecting...';
                     
-                    // Hide login, show dashboard
                     setTimeout(() => {
                         document.getElementById('loginContainer').style.display = 'none';
                         document.getElementById('dashboardContainer').style.display = 'block';
@@ -473,24 +510,23 @@
                     loginError.textContent = result?.error || 'Invalid username or password';
                 }
             } catch (error) {
-                console.error('Login error:', error);
                 loginError.className = 'error-message';
                 loginError.textContent = 'Connection error: ' + error.message;
             } finally {
-                loginBtn.textContent = originalText;
+                loginBtn.textContent = 'Login';
                 loginBtn.disabled = false;
             }
         }
 
         // ============================================
-        // API CALL FUNCTION - WITH JSONP
+        // API CALL FUNCTION
         // ============================================
         async function apiCall(action, params = {}, useCache = true) {
             const cacheKey = `${action}_${JSON.stringify(params)}`;
             
             if (useCache && cache.has(cacheKey)) {
                 const cached = cache.get(cacheKey);
-                if (Date.now() - cached.timestamp < 300000) {
+                if (Date.now() - cached.timestamp < 60000) {
                     return cached.data;
                 }
             }
@@ -510,12 +546,10 @@
                     }
                 });
                 
-                // Set timeout
                 const timeoutId = setTimeout(() => {
                     reject(new Error('Request timeout'));
                 }, 30000);
                 
-                // Define callback
                 window.handleResponse = function(response) {
                     clearTimeout(timeoutId);
                     if (response && response.success !== undefined) {
@@ -529,26 +563,26 @@
                     }
                 };
                 
-                // Create and send JSONP request
                 const script = document.createElement('script');
                 script.src = url.toString();
                 script.onerror = function() {
                     clearTimeout(timeoutId);
-                    reject(new Error('API call failed - check if Apps Script is deployed correctly'));
+                    reject(new Error('API call failed'));
                 };
                 document.head.appendChild(script);
                 
-                // Clean up after load
                 script.onload = function() {
                     setTimeout(() => {
-                        document.head.removeChild(script);
+                        if (document.head.contains(script)) {
+                            document.head.removeChild(script);
+                        }
                     }, 100);
                 };
             });
         }
 
         // ============================================
-        // LOGOUT FUNCTION
+        // LOGOUT
         // ============================================
         async function logout() {
             if (authToken) {
@@ -560,15 +594,15 @@
             document.getElementById('loginContainer').style.display = 'flex';
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
+            currentPage = 'dashboard';
         }
 
         // ============================================
-        // PAGE LOADING FUNCTIONS
+        // PAGE LOADING
         // ============================================
         async function loadPage(page) {
             currentPage = page;
             
-            // Update active nav item
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.classList.remove('active');
                 if (item.getAttribute('data-page') === page) {
@@ -626,7 +660,7 @@
         }
 
         // ============================================
-        // DASHBOARD PAGE
+        // DASHBOARD
         // ============================================
         async function loadDashboard() {
             const stats = await apiCall('getDashboardStats');
@@ -651,14 +685,6 @@
                         <div class="value">${stats.overallAverage || 0}%</div>
                     </div>
                     <div class="stat-card">
-                        <h3>Pass Rate</h3>
-                        <div class="value">${stats.passRate || 0}%</div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Fee Collection</h3>
-                        <div class="value">${stats.feeCollectionRate || 0}%</div>
-                    </div>
-                    <div class="stat-card">
                         <h3>Outstanding Fees</h3>
                         <div class="value">K${formatNumber(stats.totalOutstandingFees || 0)}</div>
                     </div>
@@ -675,9 +701,9 @@
                                 ${Object.entries(stats.classStats || {}).map(([className, data]) => `
                                     <tr>
                                         <td>${className}</td>
-                                        <td>${data.studentCount || 0}</td>
-                                        <td>${data.averageScore || 0}%</td>
-                                        <td><span class="badge ${(data.averageScore || 0) >= 60 ? 'badge-success' : 'badge-warning'}">${(data.averageScore || 0) >= 60 ? 'Good' : 'Needs Improvement'}</span></td>
+                                        <td>${data.count || data.studentCount || 0}</td>
+                                        <td>${data.avg || data.averageScore || 0}%</td>
+                                        <td><span class="badge ${(data.avg || data.averageScore || 0) >= 60 ? 'badge-success' : 'badge-warning'}">${(data.avg || data.averageScore || 0) >= 60 ? 'Good' : 'Needs Improvement'}</span></td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -690,7 +716,7 @@
         }
 
         // ============================================
-        // STUDENT MANAGEMENT PAGE
+        // STUDENT MANAGEMENT
         // ============================================
         async function loadStudentManagement() {
             const classes = await getClassList();
@@ -728,43 +754,112 @@
                 return;
             }
             
-            const studentArray = Array.isArray(students) ? students : (students.students || []);
+            currentStudentList = Array.isArray(students) ? students : (students.students || []);
+            currentStudentPage = 1;
+            renderStudentList();
+        }
+
+        function renderStudentList() {
+            const start = (currentStudentPage - 1) * PAGE_SIZE;
+            const end = start + PAGE_SIZE;
+            const pageStudents = currentStudentList.slice(start, end);
+            const totalPages = Math.ceil(currentStudentList.length / PAGE_SIZE);
             
-            if (studentArray.length === 0) {
-                document.getElementById('studentListContainer').innerHTML = '<p>No students found in this class</p>';
-                return;
-            }
-            
-            const html = `
+            let tableHtml = `
                 <div style="overflow-x: auto;">
                     <table id="studentTable">
                         <thead>
                             <tr><th>#</th><th>Student Name</th><th>Average</th><th>Position</th><th>Fee Balance</th><th>Status</th><th>Actions</th></tr>
                         </thead>
                         <tbody>
-                            ${studentArray.map((student, index) => `
-                                <tr>
-                                    <td>${index + 1}</td>
-                                    <td>${student.name || 'N/A'}</td>
-                                    <td>${student.averageScore || 0}%</td>
-                                    <td>${student.overallPosition || '-'}</td>
-                                    <td>K${formatNumber(student.feeBalance || 0)}</td>
-                                    <td><span class="badge ${(student.feeBalance || 0) > 0 ? 'badge-danger' : 'badge-success'}">${(student.feeBalance || 0) > 0 ? 'Has Balance' : 'Clear'}</span></td>
-                                    <td>
-                                        <button class="btn btn-sm btn-primary" onclick="viewStudentDetails('${student.name}', '${className}')">View</button>
-                                    </td>
-                                </tr>
-                            `).join('')}
+            `;
+            
+            pageStudents.forEach((student, index) => {
+                const globalIndex = start + index + 1;
+                tableHtml += `
+                    <tr>
+                        <td>${globalIndex}</td>
+                        <td>${student.name || 'N/A'}</td>
+                        <td>${student.averageScore || 0}%</td>
+                        <td>${student.overallPosition || '-'}</td>
+                        <td class="${(student.feeBalance || 0) > 0 ? 'fee-positive' : 'fee-zero'}">K${formatNumber(student.feeBalance || 0)}</td>
+                        <td><span class="badge ${(student.feeBalance || 0) > 0 ? 'badge-danger' : 'badge-success'}">${(student.feeBalance || 0) > 0 ? 'Has Balance' : 'Clear'}</span></td>
+                        <td><button class="btn btn-sm btn-primary" onclick="viewStudentDetails('${student.name}', '${document.getElementById('classSelect').value}')">View</button></td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `
                         </tbody>
                     </table>
                 </div>
             `;
             
-            document.getElementById('studentListContainer').innerHTML = html;
+            // Add pagination
+            if (totalPages > 1) {
+                tableHtml += `<div class="pagination">`;
+                for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+                    tableHtml += `<button class="page-btn ${i === currentStudentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+                }
+                if (totalPages > 10) {
+                    tableHtml += `<span>...</span>`;
+                    tableHtml += `<button class="page-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+                }
+                tableHtml += `</div>`;
+            }
+            
+            document.getElementById('studentListContainer').innerHTML = tableHtml;
+        }
+
+        function goToPage(page) {
+            currentStudentPage = page;
+            renderStudentList();
+        }
+
+        function filterStudents() {
+            const searchTerm = document.getElementById('searchInput')?.value.toLowerCase() || '';
+            if (!searchTerm) {
+                renderStudentList();
+                return;
+            }
+            
+            const filtered = currentStudentList.filter(s => 
+                (s.name || '').toLowerCase().includes(searchTerm)
+            );
+            
+            const start = 0;
+            const end = PAGE_SIZE;
+            const pageStudents = filtered.slice(start, end);
+            
+            let tableHtml = `
+                <div style="overflow-x: auto;">
+                    <table id="studentTable">
+                        <thead><tr><th>#</th><th>Student Name</th><th>Average</th><th>Position</th><th>Fee Balance</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody>
+            `;
+            
+            pageStudents.forEach((student, index) => {
+                tableHtml += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${student.name || 'N/A'}</td>
+                        <td>${student.averageScore || 0}%</td>
+                        <td>${student.overallPosition || '-'}</td>
+                        <td>K${formatNumber(student.feeBalance || 0)}</td>
+                        <td><span class="badge ${(student.feeBalance || 0) > 0 ? 'badge-danger' : 'badge-success'}">${(student.feeBalance || 0) > 0 ? 'Has Balance' : 'Clear'}</span></td>
+                        <td><button class="btn btn-sm btn-primary" onclick="viewStudentDetails('${student.name}', '${document.getElementById('classSelect').value}')">View</button></td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `</tbody></table></div>`;
+            if (filtered.length === 0) tableHtml = '<p>No students found</p>';
+            
+            document.getElementById('studentListContainer').innerHTML = tableHtml;
         }
 
         // ============================================
-        // FEE BALANCES PAGE
+        // FEE BALANCES
         // ============================================
         async function loadFeeBalances() {
             document.getElementById('contentArea').innerHTML = '<div class="spinner"></div>';
@@ -777,21 +872,21 @@
             }
             
             const students = feeData.students || [];
-            const studentsWithBalance = students.filter(s => (s.feeBalance || 0) > 0);
+            const summary = feeData.summary || {};
             
             const html = `
                 <div class="stats-grid">
                     <div class="stat-card">
                         <h3>Total Outstanding</h3>
-                        <div class="value">K${formatNumber(feeData.summary?.totalOutstanding || 0)}</div>
+                        <div class="value">K${formatNumber(summary.totalOutstanding || 0)}</div>
                     </div>
                     <div class="stat-card">
                         <h3>Students with Balance</h3>
-                        <div class="value">${feeData.summary?.studentsWithBalance || 0}</div>
+                        <div class="value">${summary.studentsWithBalance || 0}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>Average Balance</h3>
-                        <div class="value">K${formatNumber(feeData.summary?.averageBalance || 0)}</div>
+                        <h3>Total Students</h3>
+                        <div class="value">${summary.totalStudents || 0}</div>
                     </div>
                 </div>
                 
@@ -807,17 +902,15 @@
                                 <tr><th>#</th><th>Student Name</th><th>Class</th><th>Fee Balance</th><th>Average Score</th><th>Status</th><th>Action</th></tr>
                             </thead>
                             <tbody>
-                                ${studentsWithBalance.map((student, index) => `
+                                ${students.map((student, index) => `
                                     <tr>
                                         <td>${index + 1}</td>
                                         <td>${student.name || 'N/A'}</td>
                                         <td>${student.className || 'N/A'}</td>
-                                        <td style="color: red; font-weight: bold;">K${formatNumber(student.feeBalance || 0)}</td>
+                                        <td class="fee-positive">K${formatNumber(student.feeBalance || 0)}</td>
                                         <td>${student.averageScore || 0}%</td>
                                         <td><span class="badge badge-danger">Overdue</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-primary" onclick="viewStudentDetails('${student.name}', '${student.className}')">View</button>
-                                        </td>
+                                        <td><button class="btn btn-sm btn-primary" onclick="viewStudentDetails('${student.name}', '${student.className}')">View</button></td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -829,8 +922,20 @@
             document.getElementById('contentArea').innerHTML = html;
         }
 
+        function filterFeeTable() {
+            const searchTerm = document.getElementById('feeSearch')?.value.toLowerCase() || '';
+            const table = document.getElementById('feeTable');
+            if (!table) return;
+            
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const name = row.cells[1]?.innerText.toLowerCase() || '';
+                row.style.display = name.includes(searchTerm) ? '' : 'none';
+            });
+        }
+
         // ============================================
-        // CLASS PERFORMANCE PAGE
+        // CLASS PERFORMANCE
         // ============================================
         async function loadClassPerformance() {
             const classes = await getClassList();
@@ -843,9 +948,9 @@
                             <option value="">Select Class</option>
                             ${classes.map(c => `<option value="${c}">${c}</option>`).join('')}
                         </select>
-                        <div id="classPerformanceContainer">
-                            <p>Select a class to view performance</p>
-                        </div>
+                    </div>
+                    <div id="classPerformanceContainer">
+                        <p>Select a class to view performance</p>
                     </div>
                 </div>
             `;
@@ -877,8 +982,8 @@
                         <div class="value">${performance.passRate || 0}%</div>
                     </div>
                     <div class="stat-card">
-                        <h3>Distinction Rate</h3>
-                        <div class="value">${performance.distinctionRate || 0}%</div>
+                        <h3>Total Students</h3>
+                        <div class="value">${performance.studentCount || 0}</div>
                     </div>
                 </div>
                 
@@ -906,7 +1011,7 @@
         }
 
         // ============================================
-        // SUBJECT ANALYSIS PAGE
+        // SUBJECT ANALYSIS
         // ============================================
         async function loadSubjectAnalysis() {
             const classes = await getClassList();
@@ -936,14 +1041,15 @@
             const className = document.getElementById('subjClassSelect').value;
             if (!className) return;
             
-            const performance = await apiCall('getClassPerformance', { className });
+            const subjects = [
+                "Mathematics", "English", "Chichewa", "Biology", 
+                "Chemistry", "Physics", "History", "Geography"
+            ];
             
             const subjectSelect = document.getElementById('subjectNameSelect');
-            if (performance.subjectAnalysis && Object.keys(performance.subjectAnalysis).length > 0) {
-                subjectSelect.disabled = false;
-                subjectSelect.innerHTML = '<option value="">Select Subject</option>' + 
-                    Object.keys(performance.subjectAnalysis).map(s => `<option value="${s}">${s}</option>`).join('');
-            }
+            subjectSelect.disabled = false;
+            subjectSelect.innerHTML = '<option value="">Select Subject</option>' + 
+                subjects.map(s => `<option value="${s}">${s}</option>`).join('');
         }
 
         async function loadSubjectAnalysisData() {
@@ -961,23 +1067,25 @@
                 return;
             }
             
+            const stats = analysis.statistics || {};
+            
             const html = `
                 <div class="stats-grid">
                     <div class="stat-card">
                         <h3>Average Score</h3>
-                        <div class="value">${analysis.statistics?.average || 0}%</div>
+                        <div class="value">${stats.average || 0}%</div>
                     </div>
                     <div class="stat-card">
                         <h3>Pass Rate</h3>
-                        <div class="value">${analysis.statistics?.passRate || 0}%</div>
+                        <div class="value">${stats.passRate || 0}%</div>
                     </div>
                     <div class="stat-card">
                         <h3>Highest Score</h3>
-                        <div class="value">${analysis.topScore || 0}</div>
+                        <div class="value">${stats.highest || 0}</div>
                     </div>
                     <div class="stat-card">
                         <h3>Lowest Score</h3>
-                        <div class="value">${analysis.lowestScore || 0}</div>
+                        <div class="value">${stats.lowest || 0}</div>
                     </div>
                 </div>
                 
@@ -985,7 +1093,7 @@
                     <h3>👨‍🎓 Student Scores</h3>
                     <div style="overflow-x: auto;">
                         <table>
-                            <thead><tr><th>Rank</th><th>Student Name</th><th>Score</th><th>Grade</th><th>Fee Status</th></tr></thead>
+                            <thead><tr><th>Rank</th><th>Student Name</th><th>Score</th><th>Grade</th></tr></thead>
                             <tbody>
                                 ${(analysis.studentScores || []).map((student, idx) => `
                                     <tr>
@@ -993,7 +1101,6 @@
                                         <td>${student.name || 'N/A'}</td>
                                         <td>${student.score || 0}</td>
                                         <td>${student.grade || '-'}</td>
-                                        <td><span class="badge ${(student.feeBalance || 0) > 0 ? 'badge-danger' : 'badge-success'}">${(student.feeBalance || 0) > 0 ? 'Has Balance' : 'Clear'}</span></td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -1006,7 +1113,7 @@
         }
 
         // ============================================
-        // REPORTS PAGE
+        // REPORTS
         // ============================================
         async function loadReports() {
             const classes = await getClassList();
@@ -1069,8 +1176,8 @@
                                     <td>${idx + 1}</td>
                                     <td>${subject.subject || 'N/A'}</td>
                                     <td>${subject.overallAverage || 0}%</td>
-                                    <td>${subject.bestClass ? `${subject.bestClass[0]} (${subject.bestClass[1]}%)` : 'N/A'}</td>
-                                    <td>${subject.worstClass ? `${subject.worstClass[0]} (${subject.worstClass[1]}%)` : 'N/A'}</td>
+                                    <td>${subject.bestClass || 'N/A'}</td>
+                                    <td>${subject.worstClass || 'N/A'}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -1082,7 +1189,7 @@
         }
 
         // ============================================
-        // SETTINGS PAGE
+        // SETTINGS
         // ============================================
         async function loadSettings() {
             const html = `
@@ -1118,8 +1225,7 @@
                 const stats = await apiCall('getDashboardStats');
                 return Object.keys(stats.classStats || {});
             } catch (error) {
-                console.error('Error getting class list:', error);
-                return [];
+                return ["Form 1", "Form 2", "Form 3", "Form 4", "Form 1 ODL", "Form 2 ODL", "Form 3 ODL", "Form 4 ODL"];
             }
         }
 
@@ -1137,31 +1243,22 @@
             }
             
             const student = details.student;
-            const subjectsHtml = (student.subjects || [])
-                .filter(s => s.score)
-                .map(subj => `<tr><td>${subj.name}</td><td>${subj.score}</td><td>${subj.grade || '-'}</td></tr>`)
-                .join('');
             
             const modalHtml = `
                 <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; align-items: center; justify-content: center;">
-                    <div style="background: white; border-radius: 10px; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; padding: 20px;">
+                    <div style="background: white; border-radius: 10px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; padding: 20px;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-                            <h3>Student Details: ${student.name}</h3>
+                            <h3>Student Details</h3>
                             <button onclick="this.closest('div').parentElement.remove()" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
                         </div>
                         
                         <div class="stats-grid">
-                            <div class="stat-card"><h3>Class</h3><div class="value">${student.className}</div></div>
+                            <div class="stat-card"><h3>Name</h3><div class="value" style="font-size: 18px;">${student.name}</div></div>
+                            <div class="stat-card"><h3>Class</h3><div class="value" style="font-size: 18px;">${student.className}</div></div>
                             <div class="stat-card"><h3>Average</h3><div class="value">${student.averageScore}%</div></div>
                             <div class="stat-card"><h3>Ranking</h3><div class="value">${student.classRanking || '-'}/${student.classSize || '-'}</div></div>
-                            <div class="stat-card"><h3>Fee Balance</h3><div class="value" style="color: ${student.feeBalance > 0 ? 'red' : 'green'}">K${formatNumber(student.feeBalance)}</div></div>
-                        </div>
-                        
-                        <div class="card">
-                            <h3>Subject Performance</h3>
-                            <table><thead><tr><th>Subject</th><th>Score</th><th>Grade</th></tr></thead>
-                            <tbody>${subjectsHtml || '<tr><td colspan="3">No subjects found</td></tr>'}</tbody>
-                            </table>
+                            <div class="stat-card"><h3>Fee Balance</h3><div class="value" style="color: ${student.feeBalance > 0 ? 'red' : 'green'}; font-size: 18px;">K${formatNumber(student.feeBalance)}</div></div>
+                            <div class="stat-card"><h3>Position</h3><div class="value" style="font-size: 18px;">${student.overallPosition || '-'}</div></div>
                         </div>
                     </div>
                 </div>
@@ -1179,7 +1276,7 @@
                 link.download = `School_Report_${new Date().toISOString().split('T')[0]}.pdf`;
                 link.click();
             } else {
-                alert('Error generating report: ' + (result.error || 'Unknown error'));
+                alert('Error generating report');
             }
         }
 
@@ -1215,50 +1312,24 @@
             }
         }
 
-        function filterStudents() {
-            const searchTerm = document.getElementById('searchInput')?.value.toLowerCase() || '';
-            const table = document.getElementById('studentTable');
-            if (!table) return;
-            
-            const rows = table.querySelectorAll('tbody tr');
-            rows.forEach(row => {
-                const name = row.cells[1]?.innerText.toLowerCase() || '';
-                row.style.display = name.includes(searchTerm) ? '' : 'none';
-            });
-        }
-
-        function filterFeeTable() {
-            const searchTerm = document.getElementById('feeSearch')?.value.toLowerCase() || '';
-            const table = document.getElementById('feeTable');
-            if (!table) return;
-            
-            const rows = table.querySelectorAll('tbody tr');
-            rows.forEach(row => {
-                const name = row.cells[1]?.innerText.toLowerCase() || '';
-                row.style.display = name.includes(searchTerm) ? '' : 'none';
-            });
-        }
-
         function exportStudentList() {
-            const table = document.getElementById('studentTable');
-            if (!table) return;
+            if (!currentStudentList.length) return;
             
-            let csv = [];
-            const headers = ['#', 'Student Name', 'Average', 'Position', 'Fee Balance', 'Status'];
-            csv.push(headers.join(','));
+            let csv = [['#', 'Student Name', 'Average', 'Position', 'Fee Balance', 'Status']];
             
-            const rows = table.querySelectorAll('tbody tr');
-            rows.forEach(row => {
-                const rowData = [];
-                for (let i = 0; i < row.cells.length - 1; i++) {
-                    let text = row.cells[i]?.innerText || '';
-                    text = text.replace(/"/g, '""');
-                    rowData.push(`"${text}"`);
-                }
-                csv.push(rowData.join(','));
+            currentStudentList.forEach((student, index) => {
+                csv.push([
+                    index + 1,
+                    student.name,
+                    student.averageScore + '%',
+                    student.overallPosition || '-',
+                    'K' + formatNumber(student.feeBalance),
+                    (student.feeBalance || 0) > 0 ? 'Has Balance' : 'Clear'
+                ]);
             });
             
-            const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+            const csvContent = csv.map(row => row.join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
