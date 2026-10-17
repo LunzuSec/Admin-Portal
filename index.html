@@ -79,19 +79,30 @@
       <div class="login-card">
         <div class="login-header">
           <div class="logo large">LSS</div>
-          <h2>Admin Dashboard</h2>
-          <p class="muted">Sign in with the API credentials provided by the exam office.</p>
+          <h2>Lunzu Secondary</h2>
+          <p class="muted">Examination Department Dashboard</p>
         </div>
-        <label>API endpoint
-          <input type="url" id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec">
-        </label>
-        <label>API token
-          <input type="password" id="apiToken" placeholder="Paste token here">
-        </label>
-        <button id="loginBtn" class="btn-primary full-width">
-          <span class="btn-label">Load dashboard</span>
-          <span class="btn-spinner hidden"></span>
-        </button>
+
+        <form id="loginForm" onsubmit="event.preventDefault(); document.getElementById('loginBtn').click();">
+          <label for="apiToken">Access password</label>
+          <input
+            type="password"
+            id="apiToken"
+            placeholder="Enter password"
+            autocomplete="current-password"
+            autofocus>
+
+          <div id="loginError" class="login-error" style="display:none"></div>
+
+          <button type="submit" id="loginBtn" class="btn-primary full-width">
+            <span class="btn-label">Sign in</span>
+            <span class="btn-spinner hidden"></span>
+          </button>
+        </form>
+
+        <p class="login-footer muted small">
+          Access is restricted to the Examination Department.
+        </p>
       </div>
     </section>
 
