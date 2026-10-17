@@ -1,129 +1,321 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lunzu Secondary — Admin Dashboard</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-</head>
-<body>
+/* Lunzu Secondary — Admin Dashboard
+ * Chart.js guard + client cache + group filter.
+ */
 
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">LSS</div>
-      <div>
-        <h1>Lunzu Secondary</h1>
-        <p class="muted">Examination Department · Term Tracking</p>
-      </div>
-    </div>
-    <div class="status" id="status">
-      <span class="dot"></span>
-      <span id="statusText">Connecting…</span>
-    </div>
-  </header>
+// Load Chart.js fallback if primary CDN failed
+(function ensureChartJS() {
+  if (typeof Chart !== 'undefined') return;
+  const alt = document.createElement('script');
+  alt.src = 'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js';
+  alt.async = false;
+  document.head.appendChild(alt);
+})();
 
-  <main>
-    <section id="loginPanel" class="panel">
-      <h2>Sign in to the dashboard</h2>
-      <p class="muted">Enter the API URL and token shared by the exam office.</p>
-      <label>
-        API endpoint
-        <input type="url" id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec">
-      </label>
-      <label>
-        API token
-        <input type="password" id="apiToken" placeholder="Paste token here">
-      </label>
-      <button id="loginBtn">Load dashboard</button>
-      <p class="muted small">Credentials are stored in your browser only.</p>
-    </section>
+const CACHE_KEY = 'lss_dashboard_cache_v1';
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
-    <section id="dashboard" class="hidden">
-<div class="group-tabs" id="groupTabs">
-    <button class="group-tab active" data-group="all">All Classes</button>
-    <button class="group-tab" data-group="Regular">Regular</button>
-    <button class="group-tab" data-group="ODL">ODL</button>
-  </div>
-      <div class="kpi-grid">
-        <div class="kpi">
-          <div class="kpi-label">Total files</div>
-          <div class="kpi-value" id="kpiFiles">–</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Fully submitted</div>
-          <div class="kpi-value good" id="kpiSubmitted">–</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Partially submitted</div>
-          <div class="kpi-value warn" id="kpiPartial">–</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Not started</div>
-          <div class="kpi-value bad" id="kpiEmpty">–</div>
-        </div>
-      </div>
+const state = {
+  apiUrl: '',
+  apiToken: '',
+  summary: null,
+  submissions: null,
+  teachers: null,
+  chart: null,
+  activeGroup: 'all'
+};
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Overall progress by class</h2>
-          <button id="refreshBtn" class="btn-secondary">Refresh</button>
-        </div>
-        <div class="chart-wrap">
-          <canvas id="classChart"></canvas>
-        </div>
-      </section>
+// ── Login ────────────────────────────────────────────
 
-      <section class="panel">
-        <h2>Submission status per class-subject</h2>
-        <div class="controls">
-          <input type="search" id="searchInput" placeholder="Search class or subject…">
-          <select id="statusFilter">
-            <option value="all">All statuses</option>
-            <option value="complete">Complete</option>
-            <option value="partial">Partial</option>
-            <option value="empty">Not started</option>
-          </select>
-        </div>
-        <div class="table-wrap">
-          <table id="submissionsTable">
-            <thead>
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const url = document.getElementById('apiUrl').value.trim();
+  const token = document.getElementById('apiToken').value.trim();
+  if (!url || !token) { alert('Enter both API URL and token.'); return; }
+  state.apiUrl = url;
+  state.apiToken = token;
+  localStorage.setItem('lss_dashboard_url', url);
+  localStorage.setItem('lss_dashboard_token', token);
+  sessionStorage.removeItem(CACHE_KEY);
+  await loadAll(true);
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  const savedUrl = localStorage.getItem('lss_dashboard_url');
+  const savedToken = localStorage.getItem('lss_dashboard_token');
+  if (savedUrl && savedToken) {
+    document.getElementById('apiUrl').value = savedUrl;
+    document.getElementById('apiToken').value = savedToken;
+    state.apiUrl = savedUrl;
+    state.apiToken = savedToken;
+    loadAll(false);
+  }
+
+  document.getElementById('groupTabs').addEventListener('click', e => {
+    const btn = e.target.closest('.group-tab');
+    if (!btn) return;
+    document.querySelectorAll('.group-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.activeGroup = btn.dataset.group;
+    if (state.summary) {
+      renderKpis(state.summary);
+      renderChart(state.summary);
+      renderSubmissions(state.submissions);
+      renderTeachers(state.teachers);
+    }
+  });
+});
+
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  sessionStorage.removeItem(CACHE_KEY);
+  loadAll(true);
+});
+
+// ── Data loading ─────────────────────────────────────
+
+async function loadAll(forceFresh) {
+  if (!forceFresh) {
+    const cached = readCache();
+    if (cached) {
+      state.summary = cached.summary;
+      state.submissions = cached.submissions;
+      state.teachers = cached.teachers;
+      renderAll();
+      setStatus('Loaded from cache · ' + new Date(cached.timestamp).toLocaleString(), 'ready');
+      return;
+    }
+  }
+
+  setStatus('Loading from server…', 'loading');
+  try {
+    const [summary, submissions, teachers] = await Promise.all([
+      fetchJSON('summary'),
+      fetchJSON('submissions'),
+      fetchJSON('teachers')
+    ]);
+    if (summary.error)     throw new Error(summary.message || summary.error);
+    if (submissions.error) throw new Error(submissions.message || submissions.error);
+    if (teachers.error)    throw new Error(teachers.message || teachers.error);
+
+    state.summary = summary;
+    state.submissions = submissions;
+    state.teachers = teachers;
+
+    writeCache();
+    renderAll();
+
+    const cacheNote = summary.cached ? 'server cache' : 'fresh';
+    setStatus('Connected · ' + cacheNote + ' · ' + new Date().toLocaleString(), 'ready');
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'error');
+    alert('Failed to load: ' + err.message);
+  }
+}
+
+function renderAll() {
+  renderKpis(state.summary);
+  renderChart(state.summary);
+  renderSubmissions(state.submissions);
+  renderTeachers(state.teachers);
+  document.getElementById('loginPanel').classList.add('hidden');
+  document.getElementById('dashboard').classList.remove('hidden');
+}
+
+async function fetchJSON(action) {
+  const url = `${state.apiUrl}?action=${action}&token=${encodeURIComponent(state.apiToken)}`;
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch (e) { throw new Error('Non-JSON response from API'); }
+}
+
+// ── Client cache ─────────────────────────────────────
+
+function readCache() {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (Date.now() - data.timestamp > CACHE_TTL_MS) {
+      sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    return data;
+  } catch (e) { return null; }
+}
+
+function writeCache() {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+      timestamp: Date.now(),
+      summary: state.summary,
+      submissions: state.submissions,
+      teachers: state.teachers
+    }));
+  } catch (e) {}
+}
+
+function setStatus(text, mode) {
+  document.getElementById('statusText').textContent = text;
+  document.querySelector('.dot').style.background =
+    mode === 'error'   ? '#dc2626' :
+    mode === 'loading' ? '#f59e0b' :
+                         '#4ade80';
+}
+
+// ── KPI cards ────────────────────────────────────────
+
+function renderKpis(summary) {
+  const t = state.activeGroup === 'all'
+    ? summary.totals
+    : (summary.totals.byGroup[state.activeGroup] || { files: 0, submitted: 0, partial: 0, empty: 0 });
+  document.getElementById('kpiFiles').textContent = t.files;
+  document.getElementById('kpiSubmitted').textContent = t.submitted;
+  document.getElementById('kpiPartial').textContent = t.partial;
+  document.getElementById('kpiEmpty').textContent = t.empty;
+}
+
+// ── Chart (with graceful fallback) ───────────────────
+
+function renderChart(summary) {
+  const byClass = summary.totals.byClass;
+  const classes = Object.keys(byClass)
+    .filter(c => state.activeGroup === 'all' || byClass[c].group === state.activeGroup)
+    .sort();
+  const complete = classes.map(c => byClass[c].submitted);
+  const partial  = classes.map(c => byClass[c].partial);
+  const empty    = classes.map(c => byClass[c].empty);
+
+  // Chart.js missing → render table instead
+  if (typeof Chart === 'undefined') {
+    const wrap = document.querySelector('.chart-wrap');
+    if (wrap) {
+      wrap.innerHTML = `
+        <table style="width:100%;font-size:13px">
+          <thead>
+            <tr><th>Class</th><th>Complete</th><th>Partial</th><th>Not started</th></tr>
+          </thead>
+          <tbody>
+            ${classes.map((c, i) => `
               <tr>
-                <th>Class</th>
-                <th>Subject</th>
-                <th>Students</th>
-                <th>Scores</th>
-                <th>Progress</th>
-                <th>Last modified</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+                <td>${c}</td><td>${complete[i]}</td>
+                <td>${partial[i]}</td><td>${empty[i]}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+    return;
+  }
+
+  const canvas = document.getElementById('classChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (state.chart) state.chart.destroy();
+
+  state.chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: classes,
+      datasets: [
+        { label: 'Complete',    data: complete, backgroundColor: '#4d6b3f' },
+        { label: 'Partial',     data: partial,  backgroundColor: '#b8860b' },
+        { label: 'Not started', data: empty,    backgroundColor: '#a0522d' }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, ticks: { color: '#4b5563' } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: '#4b5563' } }
+      },
+      plugins: {
+        legend: { labels: { color: '#1e293b', font: { family: 'Georgia' } } }
+      }
+    }
+  });
+}
+
+// ── Submissions table ────────────────────────────────
+
+function renderSubmissions(data) {
+  const tbody = document.querySelector('#submissionsTable tbody');
+  tbody.innerHTML = '';
+  const filtered = data.rows
+    .filter(r => state.activeGroup === 'all' || r.group === state.activeGroup)
+    .sort((a, b) => a.class.localeCompare(b.class) || a.subject.localeCompare(b.subject));
+
+  filtered.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.dataset.search = `${row.class} ${row.subject}`.toLowerCase();
+    tr.dataset.status = row.complete ? 'complete'
+                      : row.totalScores > 0 ? 'partial' : 'empty';
+    const statusClass = row.complete ? 'complete'
+                      : row.totalScores > 0 ? 'partial' : 'empty';
+    tr.innerHTML = `
+      <td><strong>${row.class}</strong></td>
+      <td>${row.subject}</td>
+      <td>${row.students}</td>
+      <td>${row.totalScores} / ${row.students * 7}</td>
+      <td>
+        <div class="progress-bar ${statusClass}">
+          <div style="width: ${Math.min(100, row.percentComplete)}%"></div>
         </div>
-      </section>
+        <small class="muted">${row.percentComplete}%</small>
+      </td>
+      <td><small class="muted">${formatDate(row.lastModified)}</small></td>
+      <td><a href="${row.fileUrl}" target="_blank" rel="noopener">Open</a></td>
+    `;
+    tbody.appendChild(tr);
+  });
 
-      <section class="panel">
-        <h2>Teacher submissions</h2>
-        <div class="table-wrap">
-          <table id="teachersTable">
-            <thead>
-              <tr>
-                <th>Teacher</th>
-                <th>Class</th>
-                <th>Subject</th>
-                <th>Progress</th>
-                <th>Last modified</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+  document.getElementById('searchInput').oninput = filterSubmissions;
+  document.getElementById('statusFilter').onchange = filterSubmissions;
+}
+
+function filterSubmissions() {
+  const query = document.getElementById('searchInput').value.toLowerCase();
+  const status = document.getElementById('statusFilter').value;
+  document.querySelectorAll('#submissionsTable tbody tr').forEach(tr => {
+    const matchesSearch = tr.dataset.search.includes(query);
+    const matchesStatus = status === 'all' || tr.dataset.status === status;
+    tr.style.display = matchesSearch && matchesStatus ? '' : 'none';
+  });
+}
+
+// ── Teachers table ───────────────────────────────────
+
+function renderTeachers(data) {
+  const tbody = document.querySelector('#teachersTable tbody');
+  tbody.innerHTML = '';
+  const filtered = data.rows
+    .filter(r => state.activeGroup === 'all' || r.group === state.activeGroup)
+    .sort((a, b) => a.teacherName.localeCompare(b.teacherName));
+
+  filtered.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.teacherName}</td>
+      <td>${row.class}</td>
+      <td>${row.subject}</td>
+      <td>
+        <div class="progress-bar">
+          <div style="width: ${Math.min(100, row.percentComplete)}%"></div>
         </div>
-      </section>
+        <small class="muted">${row.percentComplete}%</small>
+      </td>
+      <td><small class="muted">${formatDate(row.lastModified)}</small></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
 
-    </section>
-  </main>
+// ── Utilities ────────────────────────────────────────
 
-  <script src="app.js"></script>
-</body>
-</html>
+function formatDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch (e) { return iso; }
+}
