@@ -1,5 +1,10 @@
 /* Lunzu Secondary — Admin Dashboard */
 
+// ═══════════════════════════════════════════════════════════
+// CONFIGURATION — set the API URL here (once, at deployment)
+// ═══════════════════════════════════════════════════════════
+const API_URL = 'https://script.google.com/macros/s/AKfycbzB5TYa8Xbw5OT90Fh9UC3LoCYJaqxBkAPuBtrQFNNVB3sMcUfrlG0drVn3xxf8SeZoKg/exec';
+
 (function ensureChartJS() {
   if (typeof Chart !== 'undefined') return;
   const alt = document.createElement('script');
@@ -12,7 +17,7 @@ const CACHE_KEY = 'lss_dashboard_cache_v5';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const state = {
-  apiUrl: '',
+  apiUrl: API_URL,
   apiToken: '',
   summary: null,
   submissions: null,
@@ -128,23 +133,25 @@ function closeSidebar() {
   }
 }
 
-// ── Login / bootstrap ───────────────────────────────
+// ── Login ───────────────────────────────────────────
 
 document.getElementById('loginBtn').addEventListener('click', async () => {
-  const url = document.getElementById('apiUrl').value.trim();
   const token = document.getElementById('apiToken').value.trim();
-  if (!url || !token) { alert('Enter both API URL and token.'); return; }
-  state.apiUrl = url;
+  if (!token) {
+    document.getElementById('loginError').textContent = 'Please enter the access password.';
+    document.getElementById('loginError').style.display = 'block';
+    return;
+  }
+  document.getElementById('loginError').style.display = 'none';
+  state.apiUrl = API_URL;
   state.apiToken = token;
-  localStorage.setItem('lss_dashboard_url', url);
-  localStorage.setItem('lss_dashboard_token', token);
+  sessionStorage.setItem('lss_dashboard_token', token);
   sessionStorage.removeItem(CACHE_KEY);
   await loadAll(true);
 });
 
 document.getElementById('logoutBtn').addEventListener('click', () => {
-  localStorage.removeItem('lss_dashboard_url');
-  localStorage.removeItem('lss_dashboard_token');
+  sessionStorage.removeItem('lss_dashboard_token');
   sessionStorage.removeItem(CACHE_KEY);
   location.reload();
 });
@@ -156,14 +163,12 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Auto-login
-  const u = localStorage.getItem('lss_dashboard_url');
-  const t = localStorage.getItem('lss_dashboard_token');
-  if (u && t) {
-    document.getElementById('apiUrl').value = u;
-    document.getElementById('apiToken').value = t;
-    state.apiUrl = u;
-    state.apiToken = t;
+  // Auto-login from session
+  const savedToken = sessionStorage.getItem('lss_dashboard_token');
+  if (savedToken) {
+    document.getElementById('apiToken').value = savedToken;
+    state.apiUrl = API_URL;
+    state.apiToken = savedToken;
     loadAll(false);
   }
 
@@ -243,7 +248,8 @@ async function loadAll(forceFresh) {
   setStatusLoading(true);
   setButtonLoading('loginBtn', true);
   setButtonLoading('refreshBtn', true);
-  showOverlay('Loading dashboard…', 'Fetching submission data. First load may take ~20 seconds.');
+  showOverlay('Loading dashboard…',
+    'Fetching data. First load may take a few minutes; subsequent loads are instant.');
 
   try {
     const [summary, submissions, teachers] = await Promise.all([
@@ -251,10 +257,6 @@ async function loadAll(forceFresh) {
       fetchJSON('submissions'),
       fetchJSON('teachers')
     ]);
-    if (summary.error)     throw new Error(summary.message || summary.error);
-    if (submissions.error) throw new Error(submissions.message || submissions.error);
-    if (teachers.error)    throw new Error(teachers.message || teachers.error);
-
     state.summary = summary;
     state.submissions = submissions;
     state.teachers = teachers;
@@ -264,9 +266,22 @@ async function loadAll(forceFresh) {
     const note = summary.cached ? 'server cache' : 'fresh';
     setStatus('Connected · ' + note, 'ready');
   } catch (err) {
-    setStatus('Error: ' + err.message, 'error');
-    hideOverlay();
-    alert('Failed to load: ' + err.message);
+    const isLoginScreen = !document.getElementById('loginPanel').classList.contains('hidden');
+
+    if (isLoginScreen && err.message === 'unauthorized') {
+      const errorEl = document.getElementById('loginError');
+      errorEl.textContent = 'Incorrect password. Please try again.';
+      errorEl.style.display = 'block';
+      sessionStorage.removeItem('lss_dashboard_token');
+    } else if (isLoginScreen && err.message.indexOf('Server error') !== -1) {
+      const errorEl = document.getElementById('loginError');
+      errorEl.textContent = 'Cannot reach the server. Check your connection and try again.';
+      errorEl.style.display = 'block';
+    } else {
+      setStatus('Error: ' + err.message, 'error');
+      hideOverlay();
+      alert('Failed to load: ' + err.message);
+    }
   } finally {
     setStatusLoading(false);
     setButtonLoading('loginBtn', false);
@@ -290,8 +305,11 @@ async function fetchJSON(action) {
   const url = `${state.apiUrl}?action=${action}&token=${encodeURIComponent(state.apiToken)}`;
   const res = await fetch(url);
   const txt = await res.text();
-  try { return JSON.parse(txt); }
-  catch (e) { throw new Error('Non-JSON response from API'); }
+  let json;
+  try { json = JSON.parse(txt); }
+  catch (e) { throw new Error('Server error. Check your connection.'); }
+  if (json.error) throw new Error(json.error);
+  return json;
 }
 
 // ── Cache ───────────────────────────────────────────
