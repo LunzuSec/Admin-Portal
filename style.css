@@ -234,61 +234,116 @@ body {
 }
 .view.hidden { display: none; }
 
-/* ═══ LOGIN ═══ */
+/* ═══ LOGIN — clean, single-focus ═══ */
 .login-screen {
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 24px;
+  background: linear-gradient(180deg, #f4f1ea 0%, #ece6da 100%);
 }
+
 .login-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 380px;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 36px 32px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+  border-radius: 14px;
+  padding: 40px 36px 32px;
+  box-shadow: 0 8px 32px rgba(30,41,59,0.08);
 }
-.login-header { text-align: center; margin-bottom: 28px; }
-.login-header .logo.large {
-  width: 64px; height: 64px;
-  font-size: 22px;
-  margin: 0 auto 16px;
-  background: var(--gold);
-  color: var(--ink);
-  display: grid; place-items: center;
-  font-weight: 700;
-  border-radius: 12px;
-}
-.login-header h2 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
-.login-header p { margin: 0; font-size: 13px; }
 
-label {
-  display: block;
-  margin-bottom: 18px;
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-header .logo.large {
+  width: 68px;
+  height: 68px;
+  font-size: 24px;
+  margin: 0 auto 20px;
+  background: var(--ink);
+  color: var(--gold);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  border-radius: 16px;
+  letter-spacing: 1px;
+}
+
+.login-header h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.login-header p {
+  margin: 0;
   font-size: 13px;
-  color: var(--ink-soft);
-  font-weight: 500;
+  color: var(--muted);
 }
-input, select {
-  display: block;
-  width: 100%;
-  margin-top: 6px;
-  padding: 11px 14px;
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-card label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.login-card input[type="password"] {
+  padding: 14px 16px;
+  font-size: 15px;
+  border-radius: 8px;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 14px;
-  background: #fff;
+  margin-bottom: 8px;
   transition: border-color 0.15s, box-shadow 0.15s;
+  font-family: inherit;
 }
-input:focus, select:focus {
+
+.login-card input[type="password"]:focus {
   outline: none;
   border-color: var(--ink);
-  box-shadow: 0 0 0 3px rgba(30,41,59,0.08);
+  box-shadow: 0 0 0 3px rgba(30,41,59,0.1);
 }
 
+.login-error {
+  font-size: 12px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 4px 0 12px;
+}
+
+.login-card .btn-primary {
+  padding: 14px 24px;
+  font-size: 15px;
+  border-radius: 8px;
+  margin-top: 12px;
+  letter-spacing: 0.3px;
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ═══ GENERIC BUTTONS ═══ */
 .btn-primary {
   background: var(--ink);
   color: #fff;
@@ -386,6 +441,24 @@ input:focus, select:focus {
 .filter-bar input, .filter-bar select {
   margin-top: 0;
   max-width: 320px;
+}
+
+input, select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(30,41,59,0.08);
 }
 
 /* ═══ SUBMISSION CARDS ═══ */
@@ -803,7 +876,6 @@ input:focus, select:focus {
    ═══════════════════════════════════════════════════ */
 @media (max-width: 900px) {
 
-  /* ── Mobile top bar ── */
   .mobile-header {
     display: flex;
     position: fixed;
@@ -859,7 +931,6 @@ input:focus, select:focus {
     border-radius: 2px;
   }
 
-  /* Slide-in sidebar */
   .sidebar {
     transform: translateX(-100%);
     transition: transform 0.25s ease;
@@ -901,18 +972,26 @@ input:focus, select:focus {
   }
   .sidebar-backdrop.hidden { display: none; }
 
-  /* Main area under fixed header */
   .main {
     margin-left: 0;
     padding-top: 56px;
   }
 
   .login-screen {
-    padding: 72px 16px 24px;
+    padding: 76px 20px 24px;
     min-height: 100vh;
   }
+  .login-card {
+    padding: 32px 24px 24px;
+    border-radius: 12px;
+  }
+  .login-header .logo.large {
+    width: 56px;
+    height: 56px;
+    font-size: 20px;
+  }
+  .login-header h2 { font-size: 20px; }
 
-  /* Top bar inside dashboard */
   .topbar-inner {
     padding: 16px 16px 12px;
     flex-direction: column;
@@ -933,7 +1012,6 @@ input:focus, select:focus {
 
   .view { padding: 16px; }
 
-  /* KPIs — 2 columns */
   .kpi-strip {
     grid-template-columns: repeat(2, 1fr);
     gap: 10px;
@@ -972,7 +1050,6 @@ input:focus, select:focus {
     width: 100%;
   }
 
-  /* Modal — full screen on mobile */
   .modal { padding: 0; }
   .modal-content {
     max-height: 100vh;
