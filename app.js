@@ -1,6 +1,5 @@
 /* Lunzu Secondary — Admin Dashboard */
 
-// Chart.js fallback
 (function ensureChartJS() {
   if (typeof Chart !== 'undefined') return;
   const alt = document.createElement('script');
@@ -9,7 +8,7 @@
   document.head.appendChild(alt);
 })();
 
-const CACHE_KEY = 'lss_dashboard_cache_v3';
+const CACHE_KEY = 'lss_dashboard_cache_v4';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const state = {
@@ -20,12 +19,13 @@ const state = {
   teachers: null,
   chart: null,
   activeGroup: 'all',
+  activeView: 'overview',
   teacherCache: new Map(),
   modalData: null,
   modalGroupTab: 'Regular'
 };
 
-// ── Loading UI ──────────────────────────────────────
+// ── Loading helpers ─────────────────────────────────
 
 function showOverlay(t, s) {
   const o = document.getElementById('loadingOverlay');
@@ -51,17 +51,53 @@ function setStatusLoading(on) {
   const el = document.getElementById('status');
   if (el) el.classList.toggle('loading', on);
 }
+function setStatus(text, mode) {
+  document.getElementById('statusText').textContent = text;
+  const dot = document.querySelector('#status .dot');
+  if (!dot) return;
+  dot.style.background =
+    mode === 'error' ? '#dc2626' :
+    mode === 'loading' ? '#f59e0b' : '#4ade80';
+}
 function clearSkeletons() {
-  const sk = document.getElementById('chartSkeleton');
-  if (sk) sk.remove();
-  ['submissionsBody', 'teachersBody'].forEach(id => {
+  ['chartSkeleton'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.querySelectorAll('.skeleton-row').forEach(r => r.remove());
+    if (el) el.remove();
   });
-  ['kpiFiles', 'kpiSubmitted', 'kpiPartial', 'kpiEmpty'].forEach(id => {
+  ['submissionsList', 'teachersList'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.querySelectorAll('.skeleton-block').forEach(b => b.remove());
+  });
+  ['kpiFiles','kpiSubmitted','kpiPartial','kpiEmpty'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.querySelectorAll('.skeleton').forEach(s => s.remove());
   });
+}
+
+// ── Nav ─────────────────────────────────────────────
+
+const VIEW_TITLES = {
+  overview:    { title: 'Overview', subtitle: 'Submission status across all classes' },
+  submissions: { title: 'Submissions', subtitle: 'Per class-subject monthly and paper entry status' },
+  teachers:    { title: 'Teachers', subtitle: 'Click a teacher to inspect their assignments' }
+};
+
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    switchView(btn.dataset.view);
+  });
+});
+
+function switchView(view) {
+  state.activeView = view;
+  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+  const target = document.getElementById('view-' + view);
+  if (target) target.classList.remove('hidden');
+  const info = VIEW_TITLES[view] || VIEW_TITLES.overview;
+  document.getElementById('viewTitle').textContent = info.title;
+  document.getElementById('viewSubtitle').textContent = info.subtitle;
 }
 
 // ── Login ───────────────────────────────────────────
@@ -76,6 +112,13 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
   localStorage.setItem('lss_dashboard_token', token);
   sessionStorage.removeItem(CACHE_KEY);
   await loadAll(true);
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  localStorage.removeItem('lss_dashboard_url');
+  localStorage.removeItem('lss_dashboard_token');
+  sessionStorage.removeItem(CACHE_KEY);
+  location.reload();
 });
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -102,7 +145,14 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    sessionStorage.removeItem(CACHE_KEY);
+    state.teacherCache.clear();
+    loadAll(true);
+  });
+
   document.getElementById('modalClose').addEventListener('click', closeTeacherModal);
+  document.getElementById('modalBack').addEventListener('click', closeTeacherModal);
   document.getElementById('teacherModal').addEventListener('click', e => {
     if (e.target.id === 'teacherModal') closeTeacherModal();
   });
@@ -110,23 +160,21 @@ window.addEventListener('DOMContentLoaded', () => {
   const modalTabs = document.getElementById('modalGroupTabs');
   if (modalTabs) {
     modalTabs.addEventListener('click', e => {
-      const btn = e.target.closest('.modal-group-tab');
+      const btn = e.target.closest('.modal-tab');
       if (!btn) return;
-      modalTabs.querySelectorAll('.modal-group-tab').forEach(b => b.classList.remove('active'));
+      modalTabs.querySelectorAll('.modal-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.modalGroupTab = btn.dataset.group;
       renderModalAssignments();
     });
   }
+
+  document.getElementById('searchInput').addEventListener('input', filterSubmissions);
+  document.getElementById('statusFilter').addEventListener('change', filterSubmissions);
+  document.getElementById('teacherSearch').addEventListener('input', filterTeachers);
 });
 
-document.getElementById('refreshBtn').addEventListener('click', () => {
-  sessionStorage.removeItem(CACHE_KEY);
-  state.teacherCache.clear();
-  loadAll(true);
-});
-
-// ── Load data ───────────────────────────────────────
+// ── Data loading ────────────────────────────────────
 
 async function loadAll(forceFresh) {
   if (!forceFresh) {
@@ -136,7 +184,7 @@ async function loadAll(forceFresh) {
       state.submissions = c.submissions;
       state.teachers = c.teachers;
       renderAll();
-      setStatus('Loaded from cache · ' + new Date(c.timestamp).toLocaleString(), 'ready');
+      setStatus('Loaded from cache', 'ready');
       return;
     }
   }
@@ -164,7 +212,7 @@ async function loadAll(forceFresh) {
     writeCache();
     renderAll();
     const note = summary.cached ? 'server cache' : 'fresh';
-    setStatus('Connected · ' + note + ' · ' + new Date().toLocaleString(), 'ready');
+    setStatus('Connected · ' + note, 'ready');
   } catch (err) {
     setStatus('Error: ' + err.message, 'error');
     hideOverlay();
@@ -181,6 +229,7 @@ function renderAll() {
   clearSkeletons();
   renderKpis(state.summary);
   renderChart(state.summary);
+  renderQuickStats(state.summary);
   renderSubmissions(state.submissions);
   renderTeachers(state.teachers);
   document.getElementById('loginPanel').classList.add('hidden');
@@ -220,13 +269,6 @@ function writeCache() {
   } catch (e) {}
 }
 
-function setStatus(text, mode) {
-  document.getElementById('statusText').textContent = text;
-  document.querySelector('.dot').style.background =
-    mode === 'error' ? '#dc2626' :
-    mode === 'loading' ? '#f59e0b' : '#4ade80';
-}
-
 // ── KPIs ────────────────────────────────────────────
 
 function renderKpis(summary) {
@@ -237,6 +279,20 @@ function renderKpis(summary) {
   document.getElementById('kpiSubmitted').textContent = t.submitted;
   document.getElementById('kpiPartial').textContent = t.partial;
   document.getElementById('kpiEmpty').textContent = t.empty;
+}
+
+function renderQuickStats(summary) {
+  const t = summary.totals;
+  const completion = t.files > 0 ? Math.round((t.submitted / t.files) * 100) : 0;
+  document.getElementById('qsCompletion').textContent = completion + '%';
+  document.getElementById('qsYear').textContent = summary.academicYear || '—';
+
+  const teachersData = state.teachers;
+  if (teachersData && teachersData.rows) {
+    document.getElementById('qsTeachers').textContent = teachersData.rows.length;
+    const totalAssignments = teachersData.rows.reduce((s, r) => s + r.assignments, 0);
+    document.getElementById('qsAssignments').textContent = totalAssignments;
+  }
 }
 
 // ── Chart ───────────────────────────────────────────
@@ -278,117 +334,180 @@ function renderChart(summary) {
     options: {
       responsive: true, maintainAspectRatio: false,
       scales: {
-        x: { stacked: true, ticks: { color: '#4b5563' } },
-        y: { stacked: true, beginAtZero: true, ticks: { color: '#4b5563' } }
+        x: { stacked: true, ticks: { color: '#4b5563', font: { family: 'Georgia' } } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: '#4b5563', font: { family: 'Georgia' } } }
       },
       plugins: { legend: { labels: { color: '#1e293b', font: { family: 'Georgia' } } } }
     }
   });
 }
 
-// ── Submissions table — with per-month / per-paper ──
+// ── Submissions ─────────────────────────────────────
 
 function renderSubmissions(data) {
-  const tbody = document.getElementById('submissionsBody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
+  const container = document.getElementById('submissionsList');
+  if (!container) return;
+  container.innerHTML = '';
 
   const filtered = data.rows
     .filter(r => state.activeGroup === 'all' || r.group === state.activeGroup)
     .sort((a, b) => a.class.localeCompare(b.class) || a.subject.localeCompare(b.subject));
 
+  if (filtered.length === 0) {
+    container.innerHTML = '<p class="muted">No submissions match your filter.</p>';
+    return;
+  }
+
   filtered.forEach(row => {
-    const tr = document.createElement('tr');
-    tr.dataset.search = `${row.class} ${row.subject}`.toLowerCase();
-    tr.dataset.status = row.complete ? 'complete' : row.totalScores > 0 ? 'partial' : 'empty';
+    const card = document.createElement('div');
+    card.className = 'submission-card';
+    card.dataset.search = `${row.class} ${row.subject}`.toLowerCase();
+    card.dataset.status = row.complete ? 'complete' : row.totalScores > 0 ? 'partial' : 'empty';
 
     const t1 = row.perTerm && row.perTerm.term1 ? row.perTerm.term1 : null;
+    const statusClass = row.complete ? 'complete' : row.totalScores > 0 ? 'partial' : 'empty';
+    const statusLabel = row.complete ? 'Complete' : row.totalScores > 0 ? 'Partial' : 'Not started';
 
-    const mini = (label, cell) => {
-      if (!cell) return `<div class="mini-col"><div class="mini-label">${label}</div><div class="mini-value muted">–</div></div>`;
+    const chip = (label, cell) => {
+      if (!cell) {
+        return `<div class="chip">
+          <div class="chip-label">${label}</div>
+          <div class="chip-value muted">–</div>
+          <div class="chip-bar empty"><div style="width:0%"></div></div>
+        </div>`;
+      }
       const pct = cell.percent || 0;
       const cls = pct === 0 ? 'empty' : pct < 100 ? 'partial' : '';
-      return `<div class="mini-col">
-        <div class="mini-label">${label}</div>
-        <div class="mini-bar ${cls}"><div style="width:${pct}%"></div></div>
-        <div class="mini-value">${cell.count}<span class="muted">/${cell.total}</span></div>
+      return `<div class="chip">
+        <div class="chip-label">${label}</div>
+        <div class="chip-value">${cell.count}<span class="muted">/${cell.total}</span></div>
+        <div class="chip-bar ${cls}"><div style="width:${pct}%"></div></div>
       </div>`;
     };
 
-    const monthlyCells = t1
-      ? ['SEPT','OCT','NOV','DEC'].map(k => mini(k, t1.monthly[k])).join('')
-      : ['SEPT','OCT','NOV','DEC'].map(k => mini(k, null)).join('');
+    const monthlyChips = ['SEPT','OCT','NOV','DEC'].map(k =>
+      chip(k, t1 ? t1.monthly[k] : null)).join('');
+    const paperChips = ['P1','P2','P3'].map(k =>
+      chip(k, t1 ? t1.papers[k] : null)).join('');
 
-    const paperCells = t1
-      ? ['P1','P2','P3'].map(k => mini(k, t1.papers[k])).join('')
-      : ['P1','P2','P3'].map(k => mini(k, null)).join('');
+    card.innerHTML = `
+      <div class="submission-head">
+        <div class="submission-title">
+          ${row.class} — ${row.subject}
+          <small>${row.students} students</small>
+        </div>
+        <span class="status-pill ${statusClass}">${statusLabel}</span>
+      </div>
 
-    const statusClass = row.complete ? 'complete' : row.totalScores > 0 ? 'partial' : 'empty';
+      <div class="chip-group">${monthlyChips}</div>
+      <div class="chip-group">${paperChips}</div>
 
-    tr.innerHTML =
-      `<td><strong>${row.class}</strong><br><small class="muted">${row.subject}</small></td>
-       <td><div class="mini-group">${monthlyCells}</div></td>
-       <td><div class="mini-group">${paperCells}</div></td>
-       <td>
-         <div class="progress-bar ${statusClass}">
-           <div style="width:${Math.min(100, row.percentComplete)}%"></div>
-         </div>
-         <small class="muted">${row.percentComplete}%</small>
-       </td>
-       <td><small class="muted">${formatDate(row.lastModified)}</small></td>
-       <td><a href="${row.fileUrl}" target="_blank" rel="noopener">Open</a></td>`;
-    tbody.appendChild(tr);
+      <div class="overall-row">
+        <div class="overall-bar ${statusClass}">
+          <div style="width:${Math.min(100, row.percentComplete)}%"></div>
+        </div>
+        <span class="overall-value">${row.percentComplete}%</span>
+      </div>
+
+      <div class="submission-footer">
+        <span class="muted">${formatDate(row.lastModified)}</span>
+        <a href="${row.fileUrl}" target="_blank" rel="noopener">Open sheet →</a>
+      </div>`;
+    container.appendChild(card);
   });
-
-  document.getElementById('searchInput').oninput = filterSubmissions;
-  document.getElementById('statusFilter').onchange = filterSubmissions;
 }
 
 function filterSubmissions() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   const s = document.getElementById('statusFilter').value;
-  document.querySelectorAll('#submissionsBody tr').forEach(tr => {
-    const okSearch = tr.dataset.search.includes(q);
-    const okStatus = s === 'all' || tr.dataset.status === s;
-    tr.style.display = okSearch && okStatus ? '' : 'none';
+  document.querySelectorAll('#submissionsList .submission-card').forEach(card => {
+    const okSearch = card.dataset.search.includes(q);
+    const okStatus = s === 'all' || card.dataset.status === s;
+    card.style.display = okSearch && okStatus ? '' : 'none';
   });
 }
 
-// ── Teachers table ──────────────────────────────────
+// ── Teachers ────────────────────────────────────────
 
 function renderTeachers(data) {
-  const tbody = document.getElementById('teachersBody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
+  const container = document.getElementById('teachersList');
+  if (!container) return;
+  container.innerHTML = '';
 
   const filtered = data.rows.sort((a, b) => a.teacherName.localeCompare(b.teacherName));
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<p class="muted">No teachers configured.</p>';
+    return;
+  }
+
   filtered.forEach(row => {
-    const tr = document.createElement('tr');
-    tr.className = 'clickable';
-    tr.title = 'Click to inspect assignments';
-    tr.innerHTML =
-      `<td><strong>${row.teacherName}</strong><br><small class="muted">${row.teacherEmail}</small></td>
-       <td>${row.assignments}</td>
-       <td><span class="kpi-value good" style="font-size:16px">${row.complete}</span></td>
-       <td><span class="kpi-value warn" style="font-size:16px">${row.partial}</span></td>
-       <td><span class="kpi-value bad" style="font-size:16px">${row.empty}</span></td>
-       <td>
-         <div class="progress-bar ${row.avgPercent === 0 ? 'empty' : row.avgPercent < 100 ? 'partial' : ''}">
-           <div style="width:${row.avgPercent}%"></div>
-         </div>
-         <small class="muted">${row.avgPercent}%</small>
-       </td>`;
-    tr.addEventListener('click', () => openTeacherModal(row.teacherEmail));
-    tbody.appendChild(tr);
+    const card = document.createElement('div');
+    card.className = 'teacher-card';
+    card.dataset.search = `${row.teacherName} ${row.teacherEmail}`.toLowerCase();
+
+    const initials = row.teacherName
+      .split(/\s+/)
+      .slice(0, 2)
+      .map(w => w[0] || '')
+      .join('')
+      .toUpperCase();
+
+    card.innerHTML = `
+      <div class="teacher-head">
+        <div class="avatar">${initials}</div>
+        <div>
+          <div class="teacher-name">${row.teacherName}</div>
+          <div class="teacher-email">${row.teacherEmail}</div>
+        </div>
+      </div>
+
+      <div class="teacher-stats">
+        <div class="teacher-stat">
+          <div class="teacher-stat-label">Assigned</div>
+          <div class="teacher-stat-value">${row.assignments}</div>
+        </div>
+        <div class="teacher-stat">
+          <div class="teacher-stat-label">Complete</div>
+          <div class="teacher-stat-value good">${row.complete}</div>
+        </div>
+        <div class="teacher-stat">
+          <div class="teacher-stat-label">Not started</div>
+          <div class="teacher-stat-value bad">${row.empty}</div>
+        </div>
+      </div>
+
+      <div class="overall-row">
+        <div class="overall-bar ${row.avgPercent === 0 ? 'empty' : row.avgPercent < 100 ? 'partial' : ''}">
+          <div style="width:${row.avgPercent}%"></div>
+        </div>
+        <span class="overall-value">${row.avgPercent}%</span>
+      </div>
+
+      <div class="teacher-open">
+        <span>View details</span>
+        <span>→</span>
+      </div>`;
+
+    card.addEventListener('click', () => openTeacherModal(row.teacherEmail));
+    container.appendChild(card);
   });
 }
 
-// ── Teacher modal — Regular / ODL tabs ──────────────
+function filterTeachers() {
+  const q = document.getElementById('teacherSearch').value.toLowerCase();
+  document.querySelectorAll('#teachersList .teacher-card').forEach(card => {
+    card.style.display = card.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+
+// ── Teacher Modal ───────────────────────────────────
 
 async function openTeacherModal(email) {
   const modal = document.getElementById('teacherModal');
   document.getElementById('modalTeacherName').textContent = 'Loading…';
   document.getElementById('modalTeacherEmail').textContent = email;
+  document.getElementById('modalAvatar').textContent = '?';
   document.getElementById('modalSummary').innerHTML = '';
   document.getElementById('modalBody').innerHTML = '<p class="muted">Fetching assignments…</p>';
   document.getElementById('modalGroupTabs').style.display = 'none';
@@ -409,6 +528,14 @@ async function openTeacherModal(email) {
     document.getElementById('modalTeacherName').textContent = data.teacherName;
     document.getElementById('modalTeacherEmail').textContent = data.teacherEmail;
 
+    const initials = data.teacherName
+      .split(/\s+/)
+      .slice(0, 2)
+      .map(w => w[0] || '')
+      .join('')
+      .toUpperCase();
+    document.getElementById('modalAvatar').textContent = initials || '?';
+
     document.getElementById('modalSummary').innerHTML =
       `<div class="modal-stat"><div class="modal-stat-label">Assignments</div><div class="modal-stat-value">${data.assignmentCount}</div></div>
        <div class="modal-stat"><div class="modal-stat-label">Scores submitted</div><div class="modal-stat-value">${data.totalScores} / ${data.possibleScores}</div></div>
@@ -418,7 +545,7 @@ async function openTeacherModal(email) {
     const hasODL = data.assignments.some(a => a.group === 'ODL');
 
     const tabsEl = document.getElementById('modalGroupTabs');
-    tabsEl.querySelectorAll('.modal-group-tab').forEach(b => {
+    tabsEl.querySelectorAll('.modal-tab').forEach(b => {
       const g = b.dataset.group;
       const show = (g === 'Regular' && hasRegular) || (g === 'ODL' && hasODL);
       b.style.display = show ? '' : 'none';
@@ -428,7 +555,7 @@ async function openTeacherModal(email) {
     else if (hasODL && !hasRegular) state.modalGroupTab = 'ODL';
     else if (!hasRegular && !hasODL) state.modalGroupTab = 'Regular';
 
-    tabsEl.querySelectorAll('.modal-group-tab').forEach(b =>
+    tabsEl.querySelectorAll('.modal-tab').forEach(b =>
       b.classList.toggle('active', b.dataset.group === state.modalGroupTab));
 
     tabsEl.style.display = (hasRegular && hasODL) ? 'flex' : 'none';
@@ -457,23 +584,28 @@ function renderModalAssignments() {
 function renderAssignmentCard(a) {
   const t1 = a.perTerm && a.perTerm.term1 ? a.perTerm.term1 : null;
 
-  const statCell = (label, cell) => {
-    if (!cell) return '';
+  const chip = (label, cell) => {
+    if (!cell) {
+      return `<div class="chip">
+        <div class="chip-label">${label}</div>
+        <div class="chip-value muted">–</div>
+        <div class="chip-bar empty"><div style="width:0%"></div></div>
+      </div>`;
+    }
     const pct = cell.percent || 0;
     const cls = pct === 0 ? 'empty' : pct < 100 ? 'partial' : '';
-    return `
-      <div class="monthly-stat">
-        <div class="monthly-stat-label">${label}</div>
-        <div class="monthly-stat-bar ${cls}"><div style="width:${pct}%"></div></div>
-        <div class="monthly-stat-value">${cell.count}<span class="muted">/${cell.total}</span></div>
-      </div>`;
+    return `<div class="chip">
+      <div class="chip-label">${label}</div>
+      <div class="chip-value">${cell.count}<span class="muted">/${cell.total}</span></div>
+      <div class="chip-bar ${cls}"><div style="width:${pct}%"></div></div>
+    </div>`;
   };
 
-  const monthsRow = t1
-    ? Object.entries(t1.monthly).map(([k, v]) => statCell(k, v)).join('')
+  const monthsChips = t1
+    ? ['SEPT','OCT','NOV','DEC'].map(k => chip(k, t1.monthly[k])).join('')
     : '';
-  const papersRow = t1
-    ? Object.entries(t1.papers).map(([k, v]) => statCell(k, v)).join('')
+  const papersChips = t1
+    ? ['P1','P2','P3'].map(k => chip(k, t1.papers[k])).join('')
     : '';
 
   return `
@@ -481,18 +613,16 @@ function renderAssignmentCard(a) {
       <div class="assignment-head">
         <div>
           <div class="assignment-title">${a.class} — ${a.subject}</div>
-          <div class="assignment-meta">${a.students} students · ${a.totalScores} / ${a.possible} scores · ${formatDate(a.lastModified)}</div>
+          <div class="assignment-meta">${a.students} students · ${a.totalScores} / ${a.possible} scores</div>
         </div>
-        <div>
-          <a href="${a.fileUrl}" target="_blank" rel="noopener">Open sheet →</a>
-        </div>
+        <a href="${a.fileUrl}" target="_blank" rel="noopener">Open sheet →</a>
       </div>
 
       <div class="assignment-section-title">Continuous Assessment — Term 1</div>
-      <div class="monthly-grid">${monthsRow}</div>
+      <div class="chip-group">${monthsChips}</div>
 
       <div class="assignment-section-title">End-of-Term Papers — Term 1</div>
-      <div class="monthly-grid">${papersRow}</div>
+      <div class="chip-group">${papersChips}</div>
     </div>`;
 }
 
