@@ -8,7 +8,7 @@
   document.head.appendChild(alt);
 })();
 
-const CACHE_KEY = 'lss_dashboard_cache_v4';
+const CACHE_KEY = 'lss_dashboard_cache_v5';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const state = {
@@ -52,18 +52,30 @@ function setStatusLoading(on) {
   if (el) el.classList.toggle('loading', on);
 }
 function setStatus(text, mode) {
-  document.getElementById('statusText').textContent = text;
-  const dot = document.querySelector('#status .dot');
-  if (!dot) return;
-  dot.style.background =
-    mode === 'error' ? '#dc2626' :
-    mode === 'loading' ? '#f59e0b' : '#4ade80';
+  const statusText = document.getElementById('statusText');
+  if (statusText) statusText.textContent = text;
+
+  const desktopDot = document.querySelector('#status .dot');
+  if (desktopDot) {
+    desktopDot.style.background =
+      mode === 'error' ? '#dc2626' :
+      mode === 'loading' ? '#f59e0b' : '#4ade80';
+  }
+
+  const mobile = document.getElementById('mobileStatus');
+  if (mobile) {
+    mobile.classList.toggle('loading', mode === 'loading');
+    const mDot = mobile.querySelector('.dot');
+    if (mDot) {
+      mDot.style.background =
+        mode === 'error' ? '#dc2626' :
+        mode === 'loading' ? '#f59e0b' : '#4ade80';
+    }
+  }
 }
 function clearSkeletons() {
-  ['chartSkeleton'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.remove();
-  });
+  const sk = document.getElementById('chartSkeleton');
+  if (sk) sk.remove();
   ['submissionsList', 'teachersList'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.querySelectorAll('.skeleton-block').forEach(b => b.remove());
@@ -74,21 +86,13 @@ function clearSkeletons() {
   });
 }
 
-// ── Nav ─────────────────────────────────────────────
+// ── View switching ──────────────────────────────────
 
 const VIEW_TITLES = {
   overview:    { title: 'Overview', subtitle: 'Submission status across all classes' },
   submissions: { title: 'Submissions', subtitle: 'Per class-subject monthly and paper entry status' },
   teachers:    { title: 'Teachers', subtitle: 'Click a teacher to inspect their assignments' }
 };
-
-document.querySelectorAll('.nav-item').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    switchView(btn.dataset.view);
-  });
-});
 
 function switchView(view) {
   state.activeView = view;
@@ -100,7 +104,31 @@ function switchView(view) {
   document.getElementById('viewSubtitle').textContent = info.subtitle;
 }
 
-// ── Login ───────────────────────────────────────────
+// ── Mobile sidebar ──────────────────────────────────
+
+function openSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (!sidebar) return;
+  sidebar.classList.add('open');
+  if (backdrop) {
+    backdrop.classList.remove('hidden');
+    void backdrop.offsetWidth;
+    backdrop.classList.add('active');
+  }
+}
+
+function closeSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (sidebar) sidebar.classList.remove('open');
+  if (backdrop) {
+    backdrop.classList.remove('active');
+    setTimeout(() => backdrop.classList.add('hidden'), 250);
+  }
+}
+
+// ── Login / bootstrap ───────────────────────────────
 
 document.getElementById('loginBtn').addEventListener('click', async () => {
   const url = document.getElementById('apiUrl').value.trim();
@@ -121,7 +149,14 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
   location.reload();
 });
 
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  sessionStorage.removeItem(CACHE_KEY);
+  state.teacherCache.clear();
+  loadAll(true);
+});
+
 window.addEventListener('DOMContentLoaded', () => {
+  // Auto-login
   const u = localStorage.getItem('lss_dashboard_url');
   const t = localStorage.getItem('lss_dashboard_token');
   if (u && t) {
@@ -132,6 +167,25 @@ window.addEventListener('DOMContentLoaded', () => {
     loadAll(false);
   }
 
+  // Mobile sidebar controls
+  const menuBtn = document.getElementById('menuBtn');
+  const closeBtn = document.getElementById('sidebarClose');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (menuBtn) menuBtn.addEventListener('click', openSidebar);
+  if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+  if (backdrop) backdrop.addEventListener('click', closeSidebar);
+
+  // Sidebar nav items
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      switchView(btn.dataset.view);
+      if (window.innerWidth <= 900) closeSidebar();
+    });
+  });
+
+  // Group tabs
   document.getElementById('groupTabs').addEventListener('click', e => {
     const btn = e.target.closest('.group-tab');
     if (!btn) return;
@@ -145,12 +199,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  document.getElementById('refreshBtn').addEventListener('click', () => {
-    sessionStorage.removeItem(CACHE_KEY);
-    state.teacherCache.clear();
-    loadAll(true);
-  });
-
+  // Modal
   document.getElementById('modalClose').addEventListener('click', closeTeacherModal);
   document.getElementById('modalBack').addEventListener('click', closeTeacherModal);
   document.getElementById('teacherModal').addEventListener('click', e => {
@@ -169,6 +218,7 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Filters
   document.getElementById('searchInput').addEventListener('input', filterSubmissions);
   document.getElementById('statusFilter').addEventListener('change', filterSubmissions);
   document.getElementById('teacherSearch').addEventListener('input', filterTeachers);
@@ -334,10 +384,10 @@ function renderChart(summary) {
     options: {
       responsive: true, maintainAspectRatio: false,
       scales: {
-        x: { stacked: true, ticks: { color: '#4b5563', font: { family: 'Georgia' } } },
-        y: { stacked: true, beginAtZero: true, ticks: { color: '#4b5563', font: { family: 'Georgia' } } }
+        x: { stacked: true, ticks: { color: '#4b5563', font: { family: 'Georgia', size: 11 } } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: '#4b5563', font: { family: 'Georgia', size: 11 } } }
       },
-      plugins: { legend: { labels: { color: '#1e293b', font: { family: 'Georgia' } } } }
+      plugins: { legend: { labels: { color: '#1e293b', font: { family: 'Georgia', size: 11 } } } }
     }
   });
 }
