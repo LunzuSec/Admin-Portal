@@ -4,131 +4,149 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lunzu Secondary — Admin Dashboard</title>
-
   <link rel="stylesheet" href="style.css">
-
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
 
-  <!-- Full-page loading overlay -->
-  <div id="loadingOverlay" class="loading-overlay hidden" aria-hidden="true">
-    <div class="spinner" role="status" aria-live="polite">
+  <!-- ═══ LOADING OVERLAY ═══ -->
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="spinner">
       <div class="spinner-ring"></div>
       <div class="spinner-text" id="overlayText">Loading dashboard…</div>
-      <div class="spinner-subtext" id="overlaySubtext">
-        Fetching submission data. First load may take ~20 seconds.
-      </div>
+      <div class="spinner-subtext" id="overlaySubtext">Fetching data from the server.</div>
     </div>
   </div>
 
-  <!-- Teacher drill-down modal -->
-  <div id="teacherModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-content">
-      <div class="modal-head">
-        <div>
-          <h2 id="modalTeacherName">Teacher</h2>
-          <p id="modalTeacherEmail" class="muted small"></p>
-        </div>
-        <button id="modalClose" class="btn-close" aria-label="Close">×</button>
-      </div>
-
-      <div class="modal-summary" id="modalSummary"></div>
-
-      <!-- Regular / ODL toggle inside modal -->
-      <div class="modal-group-tabs" id="modalGroupTabs" style="display:none">
-        <button class="modal-group-tab active" data-group="Regular">Regular</button>
-        <button class="modal-group-tab" data-group="ODL">ODL</button>
-      </div>
-
-      <div class="modal-body" id="modalBody"></div>
-    </div>
-  </div>
-
-  <header class="topbar">
-    <div class="brand">
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
       <div class="logo">LSS</div>
       <div>
         <h1>Lunzu Secondary</h1>
-        <p class="muted">Examination Department · Term Tracking</p>
+        <p>Examination Department</p>
       </div>
     </div>
-    <div class="status" id="status">
-      <span class="dot"></span>
-      <span id="statusText">Connecting…</span>
-    </div>
-  </header>
 
-  <main>
-
-    <!-- ═══ LOGIN ═══ -->
-    <section id="loginPanel" class="panel">
-      <h2>Sign in to the dashboard</h2>
-      <p class="muted">Enter the API URL and token shared by the exam office.</p>
-
-      <label>
-        API endpoint
-        <input type="url" id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec">
-      </label>
-      <label>
-        API token
-        <input type="password" id="apiToken" placeholder="Paste token here">
-      </label>
-
-      <button id="loginBtn">
-        <span class="btn-label">Load dashboard</span>
-        <span class="btn-spinner hidden" aria-hidden="true"></span>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Dashboard</div>
+      <button class="nav-item active" data-view="overview">
+        <span class="nav-icon">◫</span> Overview
       </button>
+      <button class="nav-item" data-view="submissions">
+        <span class="nav-icon">▤</span> Submissions
+      </button>
+      <button class="nav-item" data-view="teachers">
+        <span class="nav-icon">◍</span> Teachers
+      </button>
+    </nav>
 
-      <p class="muted small">Credentials are stored in your browser only.</p>
+    <div class="sidebar-footer">
+      <div class="status" id="status">
+        <span class="dot"></span>
+        <span id="statusText">Connecting…</span>
+      </div>
+      <button id="refreshBtn" class="btn-ghost">
+        <span class="btn-label">Refresh data</span>
+        <span class="btn-spinner hidden"></span>
+      </button>
+      <button id="logoutBtn" class="btn-ghost small-btn">Sign out</button>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ═══ -->
+  <main class="main">
+
+    <!-- LOGIN -->
+    <section id="loginPanel" class="login-screen">
+      <div class="login-card">
+        <div class="login-header">
+          <div class="logo large">LSS</div>
+          <h2>Admin Dashboard</h2>
+          <p class="muted">Sign in with the API credentials provided by the exam office.</p>
+        </div>
+        <label>API endpoint
+          <input type="url" id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec">
+        </label>
+        <label>API token
+          <input type="password" id="apiToken" placeholder="Paste token here">
+        </label>
+        <button id="loginBtn" class="btn-primary full-width">
+          <span class="btn-label">Load dashboard</span>
+          <span class="btn-spinner hidden"></span>
+        </button>
+      </div>
     </section>
 
-    <!-- ═══ DASHBOARD ═══ -->
-    <section id="dashboard" class="hidden">
+    <!-- DASHBOARD -->
+    <section id="dashboard" class="dashboard hidden">
 
-      <div class="group-tabs" id="groupTabs">
-        <button class="group-tab active" data-group="all">All Classes</button>
-        <button class="group-tab" data-group="Regular">Regular</button>
-        <button class="group-tab" data-group="ODL">ODL</button>
-      </div>
-
-      <div class="kpi-grid" id="kpiGrid">
-        <div class="kpi">
-          <div class="kpi-label">Total files</div>
-          <div class="kpi-value" id="kpiFiles"><span class="skeleton skeleton-text">000</span></div>
+      <!-- Top bar -->
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          <h2 id="viewTitle">Overview</h2>
+          <p class="muted" id="viewSubtitle">Submission status across all classes</p>
         </div>
-        <div class="kpi">
-          <div class="kpi-label">Fully submitted</div>
-          <div class="kpi-value good" id="kpiSubmitted"><span class="skeleton skeleton-text">000</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Partially submitted</div>
-          <div class="kpi-value warn" id="kpiPartial"><span class="skeleton skeleton-text">000</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Not started</div>
-          <div class="kpi-value bad" id="kpiEmpty"><span class="skeleton skeleton-text">000</span></div>
+        <div class="group-tabs" id="groupTabs">
+          <button class="group-tab active" data-group="all">All</button>
+          <button class="group-tab" data-group="Regular">Regular</button>
+          <button class="group-tab" data-group="ODL">ODL</button>
         </div>
       </div>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Overall progress by class</h2>
-          <button id="refreshBtn" class="btn-secondary">
-            <span class="btn-label">Refresh</span>
-            <span class="btn-spinner hidden" aria-hidden="true"></span>
-          </button>
+      <!-- ═══ OVERVIEW ═══ -->
+      <div id="view-overview" class="view">
+        <div class="kpi-strip">
+          <div class="kpi-card">
+            <div class="kpi-label">Total files</div>
+            <div class="kpi-value" id="kpiFiles"><span class="skeleton skeleton-text">000</span></div>
+            <div class="kpi-foot muted">across all classes</div>
+          </div>
+          <div class="kpi-card good">
+            <div class="kpi-label">Fully submitted</div>
+            <div class="kpi-value" id="kpiSubmitted"><span class="skeleton skeleton-text">000</span></div>
+            <div class="kpi-foot muted">ready for exams office</div>
+          </div>
+          <div class="kpi-card warn">
+            <div class="kpi-label">Partially submitted</div>
+            <div class="kpi-value" id="kpiPartial"><span class="skeleton skeleton-text">000</span></div>
+            <div class="kpi-foot muted">in progress</div>
+          </div>
+          <div class="kpi-card bad">
+            <div class="kpi-label">Not started</div>
+            <div class="kpi-value" id="kpiEmpty"><span class="skeleton skeleton-text">000</span></div>
+            <div class="kpi-foot muted">no entries yet</div>
+          </div>
         </div>
-        <div class="chart-wrap">
-          <canvas id="classChart"></canvas>
-          <div class="skeleton skeleton-chart" id="chartSkeleton"></div>
-        </div>
-      </section>
 
-      <section class="panel">
-        <h2>Submission status — Term 1</h2>
-        <div class="controls">
+        <div class="overview-grid">
+          <div class="panel chart-panel">
+            <div class="panel-head">
+              <h3>Progress by class</h3>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="classChart"></canvas>
+              <div class="skeleton skeleton-chart" id="chartSkeleton"></div>
+            </div>
+          </div>
+          <div class="panel summary-panel">
+            <div class="panel-head">
+              <h3>Quick stats</h3>
+            </div>
+            <div id="quickStats" class="quick-stats">
+              <div class="quick-stat"><span class="quick-stat-label">Completion rate</span><span class="quick-stat-value" id="qsCompletion">–</span></div>
+              <div class="quick-stat"><span class="quick-stat-label">Teachers</span><span class="quick-stat-value" id="qsTeachers">–</span></div>
+              <div class="quick-stat"><span class="quick-stat-label">Assignments</span><span class="quick-stat-value" id="qsAssignments">–</span></div>
+              <div class="quick-stat"><span class="quick-stat-label">Academic year</span><span class="quick-stat-value" id="qsYear">–</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ SUBMISSIONS ═══ -->
+      <div id="view-submissions" class="view hidden">
+        <div class="filter-bar">
           <input type="search" id="searchInput" placeholder="Search class or subject…">
           <select id="statusFilter">
             <option value="all">All statuses</option>
@@ -137,51 +155,54 @@
             <option value="empty">Not started</option>
           </select>
         </div>
-        <div class="table-wrap">
-          <table id="submissionsTable">
-            <thead>
-              <tr>
-                <th>Class / Subject</th>
-                <th>Monthlies (SEPT · OCT · NOV · DEC)</th>
-                <th>Papers (P1 · P2 · P3)</th>
-                <th>Overall</th>
-                <th>Last modified</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="submissionsBody">
-              <tr class="skeleton-row"><td colspan="6"><span class="skeleton skeleton-line"></span></td></tr>
-              <tr class="skeleton-row"><td colspan="6"><span class="skeleton skeleton-line"></span></td></tr>
-              <tr class="skeleton-row"><td colspan="6"><span class="skeleton skeleton-line"></span></td></tr>
-            </tbody>
-          </table>
+        <div id="submissionsList" class="submissions-list">
+          <div class="skeleton skeleton-block"></div>
+          <div class="skeleton skeleton-block"></div>
+          <div class="skeleton skeleton-block"></div>
         </div>
-      </section>
+      </div>
 
-      <section class="panel">
-        <h2>Teacher submissions <span class="muted small">(click a row to inspect)</span></h2>
-        <div class="table-wrap">
-          <table id="teachersTable">
-            <thead>
-              <tr>
-                <th>Teacher</th>
-                <th>Assignments</th>
-                <th>Complete</th>
-                <th>Partial</th>
-                <th>Not started</th>
-                <th>Overall %</th>
-              </tr>
-            </thead>
-            <tbody id="teachersBody">
-              <tr class="skeleton-row"><td colspan="6"><span class="skeleton skeleton-line"></span></td></tr>
-              <tr class="skeleton-row"><td colspan="6"><span class="skeleton skeleton-line"></span></td></tr>
-              <tr class="skeleton-row"><td colspan="6"><span class="skeleton skeleton-line"></span></td></tr>
-            </tbody>
-          </table>
+      <!-- ═══ TEACHERS ═══ -->
+      <div id="view-teachers" class="view hidden">
+        <div class="filter-bar">
+          <input type="search" id="teacherSearch" placeholder="Search teacher by name or email…">
         </div>
-      </section>
+        <div id="teachersList" class="teachers-grid">
+          <div class="skeleton skeleton-block"></div>
+          <div class="skeleton skeleton-block"></div>
+          <div class="skeleton skeleton-block"></div>
+        </div>
+      </div>
 
     </section>
   </main>
+
+  <!-- ═══ TEACHER DETAIL MODAL ═══ -->
+  <div id="teacherModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-head">
+        <button id="modalBack" class="btn-back">← Back</button>
+        <button id="modalClose" class="btn-close" aria-label="Close">×</button>
+      </div>
+
+      <div class="modal-profile">
+        <div class="avatar large" id="modalAvatar">T</div>
+        <div>
+          <h2 id="modalTeacherName">Teacher</h2>
+          <p id="modalTeacherEmail" class="muted"></p>
+        </div>
+      </div>
+
+      <div class="modal-stats" id="modalSummary"></div>
+
+      <div class="modal-tabs" id="modalGroupTabs" style="display:none">
+        <button class="modal-tab active" data-group="Regular">Regular</button>
+        <button class="modal-tab" data-group="ODL">ODL</button>
+      </div>
+
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
 </body>
 </html>
