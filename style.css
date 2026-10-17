@@ -206,3 +206,35 @@ a:hover { text-decoration: underline; }
   .topbar { padding: 16px; flex-direction: column; align-items: flex-start; gap: 8px; }
   .controls { flex-direction: column; }
 }
+.group-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  width: fit-content;
+}
+
+.group-tab {
+  background: transparent;
+  color: var(--ink-soft);
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.group-tab:hover {
+  background: var(--border);
+}
+
+.group-tab.active {
+  background: var(--ink);
+  color: #fff;
+}
