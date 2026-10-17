@@ -109,7 +109,6 @@
     <!-- DASHBOARD -->
     <section id="dashboard" class="dashboard hidden">
 
-      <!-- Top bar -->
       <div class="topbar-inner">
         <div class="topbar-left">
           <h2 id="viewTitle">Overview</h2>
@@ -222,12 +221,29 @@
 
       <div class="modal-stats" id="modalSummary"></div>
 
+      <!-- Group tabs (Regular / ODL) -->
       <div class="modal-tabs" id="modalGroupTabs" style="display:none">
         <button class="modal-tab active" data-group="Regular">Regular</button>
         <button class="modal-tab" data-group="ODL">ODL</button>
       </div>
 
-      <div class="modal-body" id="modalBody"></div>
+      <!-- View tabs: Summary / Assignments -->
+      <div class="modal-view-tabs" id="modalViewTabs">
+        <button class="modal-view-tab active" data-view="summary">Summary</button>
+        <button class="modal-view-tab" data-view="assignments">Assignments</button>
+      </div>
+
+      <!-- Chart view -->
+      <div id="modalView-summary" class="modal-view">
+        <div class="modal-chart-wrap">
+          <canvas id="teacherChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Assignments view -->
+      <div id="modalView-assignments" class="modal-view hidden">
+        <div class="modal-body" id="modalBody"></div>
+      </div>
     </div>
   </div>
 
