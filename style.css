@@ -232,7 +232,6 @@ body {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
 .view.hidden { display: none; }
 
 /* ═══ LOGIN ═══ */
@@ -349,9 +348,6 @@ input:focus, select:focus {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 20px;
-}
-@media (max-width: 1000px) {
-  .overview-grid { grid-template-columns: 1fr; }
 }
 
 .panel {
@@ -795,12 +791,204 @@ input:focus, select:focus {
 .small { font-size: 11px; }
 .hidden { display: none; }
 
-/* ═══ RESPONSIVE ═══ */
+/* ═══ HIDE MOBILE CHROME ON DESKTOP ═══ */
+.mobile-header,
+.sidebar-backdrop,
+.sidebar-close {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════
+   MOBILE / TABLET — max-width: 900px
+   ═══════════════════════════════════════════════════ */
 @media (max-width: 900px) {
-  .sidebar { transform: translateX(-100%); }
-  .main { margin-left: 0; }
-  .topbar-inner { padding: 20px 20px 16px; flex-direction: column; align-items: stretch; gap: 12px; }
-  .view { padding: 20px; }
-  .submissions-list, .teachers-grid { grid-template-columns: 1fr; }
-  .modal-content { max-height: 100vh; border-radius: 0; }
+
+  /* ── Mobile top bar ── */
+  .mobile-header {
+    display: flex;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 56px;
+    background: var(--ink);
+    color: #f8fafc;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    z-index: 60;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  .mobile-title {
+    font-family: Georgia, serif;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .mobile-status {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+  }
+  .mobile-status .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #4ade80;
+  }
+  .mobile-status.loading .dot {
+    background: #f59e0b;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  .hamburger {
+    background: transparent;
+    border: none;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  .hamburger:hover { background: rgba(255,255,255,0.08); }
+  .hamburger span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: #f8fafc;
+    border-radius: 2px;
+  }
+
+  /* Slide-in sidebar */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    top: 56px;
+    z-index: 80;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .sidebar-close {
+    display: block;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: transparent;
+    border: none;
+    color: #f8fafc;
+    font-size: 26px;
+    line-height: 1;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    z-index: 2;
+  }
+  .sidebar-close:hover { background: rgba(255,255,255,0.1); }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 56px 0 0 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 70;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .sidebar-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .sidebar-backdrop.hidden { display: none; }
+
+  /* Main area under fixed header */
+  .main {
+    margin-left: 0;
+    padding-top: 56px;
+  }
+
+  .login-screen {
+    padding: 72px 16px 24px;
+    min-height: 100vh;
+  }
+
+  /* Top bar inside dashboard */
+  .topbar-inner {
+    padding: 16px 16px 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    position: static;
+  }
+  .topbar-left h2 { font-size: 20px; }
+  .topbar-left p { font-size: 12px; }
+
+  .group-tabs {
+    align-self: flex-start;
+  }
+  .group-tab {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+
+  .view { padding: 16px; }
+
+  /* KPIs — 2 columns */
+  .kpi-strip {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .kpi-card { padding: 14px 14px; }
+  .kpi-label { font-size: 10px; letter-spacing: 1px; }
+  .kpi-value { font-size: 24px; }
+  .kpi-foot { font-size: 11px; }
+
+  .overview-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .panel { padding: 16px; }
+  .chart-wrap { height: 260px; }
+
+  .quick-stats { gap: 8px; }
+  .quick-stat { padding: 10px 0; }
+  .quick-stat-label { font-size: 12px; }
+  .quick-stat-value { font-size: 16px; }
+
+  .submissions-list, .teachers-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .submission-card, .teacher-card { padding: 14px 16px; }
+
+  .filter-bar {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .filter-bar input, .filter-bar select {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  /* Modal — full screen on mobile */
+  .modal { padding: 0; }
+  .modal-content {
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+    max-width: 100%;
+  }
+  .modal-head { padding: 12px 16px; }
+  .modal-profile { padding: 16px 20px 12px; }
+  .modal-profile h2 { font-size: 18px; }
+  .modal-stats { padding: 0 20px 16px; gap: 8px; }
+  .modal-stat { padding: 10px 8px; }
+  .modal-stat-value { font-size: 18px; }
+  .modal-tabs { padding: 0 20px 12px; }
+  .modal-body { padding: 16px 20px 24px; gap: 12px; }
+  .assignment-card { padding: 14px 16px; }
+  .assignment-title { font-size: 14px; }
+  .assignment-meta { font-size: 11px; }
 }
