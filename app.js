@@ -13,7 +13,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzB5TYa8Xbw5OT90Fh9UC3L
   document.head.appendChild(alt);
 })();
 
-const CACHE_KEY = 'lss_dashboard_cache_v5';
+const CACHE_KEY = 'lss_dashboard_cache_v6';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const state = {
@@ -23,11 +23,13 @@ const state = {
   submissions: null,
   teachers: null,
   chart: null,
+  teacherChart: null,
   activeGroup: 'all',
   activeView: 'overview',
   teacherCache: new Map(),
   modalData: null,
-  modalGroupTab: 'Regular'
+  modalGroupTab: 'Regular',
+  modalView: 'summary'
 };
 
 // ── Loading helpers ─────────────────────────────────
@@ -163,7 +165,6 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Auto-login from session
   const savedToken = sessionStorage.getItem('lss_dashboard_token');
   if (savedToken) {
     document.getElementById('apiToken').value = savedToken;
@@ -172,7 +173,6 @@ window.addEventListener('DOMContentLoaded', () => {
     loadAll(false);
   }
 
-  // Mobile sidebar controls
   const menuBtn = document.getElementById('menuBtn');
   const closeBtn = document.getElementById('sidebarClose');
   const backdrop = document.getElementById('sidebarBackdrop');
@@ -180,7 +180,6 @@ window.addEventListener('DOMContentLoaded', () => {
   if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
   if (backdrop) backdrop.addEventListener('click', closeSidebar);
 
-  // Sidebar nav items
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -190,7 +189,6 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Group tabs
   document.getElementById('groupTabs').addEventListener('click', e => {
     const btn = e.target.closest('.group-tab');
     if (!btn) return;
@@ -204,7 +202,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Modal
   document.getElementById('modalClose').addEventListener('click', closeTeacherModal);
   document.getElementById('modalBack').addEventListener('click', closeTeacherModal);
   document.getElementById('teacherModal').addEventListener('click', e => {
@@ -220,10 +217,24 @@ window.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('active');
       state.modalGroupTab = btn.dataset.group;
       renderModalAssignments();
+      renderTeacherChart();
     });
   }
 
-  // Filters
+  const viewTabs = document.getElementById('modalViewTabs');
+  if (viewTabs) {
+    viewTabs.addEventListener('click', e => {
+      const btn = e.target.closest('.modal-view-tab');
+      if (!btn) return;
+      viewTabs.querySelectorAll('.modal-view-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.modalView = btn.dataset.view;
+      document.getElementById('modalView-summary').classList.toggle('hidden', state.modalView !== 'summary');
+      document.getElementById('modalView-assignments').classList.toggle('hidden', state.modalView !== 'assignments');
+      if (state.modalView === 'summary') renderTeacherChart();
+    });
+  }
+
   document.getElementById('searchInput').addEventListener('input', filterSubmissions);
   document.getElementById('statusFilter').addEventListener('change', filterSubmissions);
   document.getElementById('teacherSearch').addEventListener('input', filterTeachers);
@@ -579,6 +590,22 @@ async function openTeacherModal(email) {
   document.getElementById('modalSummary').innerHTML = '';
   document.getElementById('modalBody').innerHTML = '<p class="muted">Fetching assignments…</p>';
   document.getElementById('modalGroupTabs').style.display = 'none';
+
+  // Reset to Summary view
+  state.modalView = 'summary';
+  const viewTabs = document.getElementById('modalViewTabs');
+  if (viewTabs) {
+    viewTabs.querySelectorAll('.modal-view-tab').forEach(b =>
+      b.classList.toggle('active', b.dataset.view === 'summary'));
+  }
+  document.getElementById('modalView-summary').classList.remove('hidden');
+  document.getElementById('modalView-assignments').classList.add('hidden');
+
+  if (state.teacherChart) {
+    state.teacherChart.destroy();
+    state.teacherChart = null;
+  }
+
   modal.classList.remove('hidden');
 
   try {
@@ -597,11 +624,7 @@ async function openTeacherModal(email) {
     document.getElementById('modalTeacherEmail').textContent = data.teacherEmail;
 
     const initials = data.teacherName
-      .split(/\s+/)
-      .slice(0, 2)
-      .map(w => w[0] || '')
-      .join('')
-      .toUpperCase();
+      .split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase();
     document.getElementById('modalAvatar').textContent = initials || '?';
 
     document.getElementById('modalSummary').innerHTML =
@@ -629,6 +652,7 @@ async function openTeacherModal(email) {
     tabsEl.style.display = (hasRegular && hasODL) ? 'flex' : 'none';
 
     renderModalAssignments();
+    renderTeacherChart();
   } catch (err) {
     document.getElementById('modalBody').innerHTML = `<p class="muted">Error: ${err.message}</p>`;
   }
@@ -694,8 +718,111 @@ function renderAssignmentCard(a) {
     </div>`;
 }
 
+// ── Teacher chart ───────────────────────────────────
+
+function renderTeacherChart() {
+  const data = state.modalData;
+  if (!data) return;
+
+  const canvas = document.getElementById('teacherChart');
+  if (!canvas) return;
+
+  const filtered = data.assignments.filter(a => a.group === state.modalGroupTab);
+
+  if (typeof Chart === 'undefined') {
+    const wrap = document.querySelector('.modal-chart-wrap');
+    if (wrap) {
+      wrap.innerHTML =
+        '<table style="width:100%;font-size:12px">' +
+          '<thead><tr>' +
+            '<th style="text-align:left;padding:6px">Class — Subject</th>' +
+            '<th style="text-align:right;padding:6px">Complete</th>' +
+            '<th style="text-align:right;padding:6px">Scores</th>' +
+          '</tr></thead>' +
+          '<tbody>' +
+            filtered.map(a => `
+              <tr>
+                <td style="padding:6px;border-top:1px solid #e5e1d8">${a.class} — ${a.subject}</td>
+                <td style="padding:6px;border-top:1px solid #e5e1d8;text-align:right">${a.percentComplete}%</td>
+                <td style="padding:6px;border-top:1px solid #e5e1d8;text-align:right">${a.totalScores} / ${a.possible}</td>
+              </tr>`).join('') +
+          '</tbody>' +
+        '</table>';
+    }
+    return;
+  }
+
+  if (state.teacherChart) {
+    state.teacherChart.destroy();
+    state.teacherChart = null;
+  }
+
+  const labels = filtered.map(a => `${a.class} — ${a.subject}`);
+  const values = filtered.map(a => a.percentComplete);
+  const colors = filtered.map(a =>
+    a.complete ? '#4d6b3f' :
+    a.totalScores > 0 ? '#b8860b' :
+    '#a0522d'
+  );
+
+  state.teacherChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Completion %',
+        data: values,
+        backgroundColor: colors,
+        borderRadius: 4,
+        barThickness: Math.min(34, Math.max(18, 300 / Math.max(labels.length, 1)))
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { right: 12 } },
+      scales: {
+        x: {
+          beginAtZero: true,
+          max: 100,
+          grid: { color: 'rgba(229,225,216,0.6)' },
+          ticks: {
+            color: '#4b5563',
+            font: { family: 'Georgia', size: 11 },
+            callback: v => v + '%'
+          }
+        },
+        y: {
+          grid: { display: false },
+          ticks: {
+            color: '#1e293b',
+            font: { family: 'Georgia', size: 12 },
+            autoSkip: false
+          }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const a = filtered[ctx.dataIndex];
+              return `${a.percentComplete}% · ${a.totalScores} / ${a.possible} scores`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
 function closeTeacherModal() {
   document.getElementById('teacherModal').classList.add('hidden');
+  if (state.teacherChart) {
+    state.teacherChart.destroy();
+    state.teacherChart = null;
+  }
   state.modalData = null;
 }
 
@@ -710,3 +837,10 @@ function formatDate(iso) {
     });
   } catch (e) { return iso; }
 }
+
+// ── Responsive chart redraw ─────────────────────────
+
+window.addEventListener('resize', () => {
+  if (state.teacherChart) state.teacherChart.resize();
+  if (state.chart) state.chart.resize();
+});
