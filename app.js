@@ -13,7 +13,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzB5TYa8Xbw5OT90Fh9UC3L
   document.head.appendChild(alt);
 })();
 
-const CACHE_KEY = 'lss_dashboard_cache_v6';
+const CACHE_KEY = 'lss_dashboard_cache_v7';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const state = {
@@ -124,7 +124,6 @@ function openSidebar() {
     backdrop.classList.add('active');
   }
 }
-
 function closeSidebar() {
   const sidebar = document.getElementById('sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
@@ -421,6 +420,30 @@ function renderChart(summary) {
   });
 }
 
+// ── Wide bar renderer (shared) ─────────────────────
+
+function renderWideBar(label, cell) {
+  if (!cell) {
+    return `<div class="wide-bar-row">
+      <span class="wide-bar-label">${label}</span>
+      <div class="wide-bar-track"><div class="wide-bar-fill empty" style="width:0%"></div></div>
+      <span class="wide-bar-meta muted">— / —</span>
+    </div>`;
+  }
+  const pct = cell.percent || 0;
+  const cls = pct === 0 ? 'empty' : pct < 100 ? 'partial' : '';
+  return `<div class="wide-bar-row">
+    <span class="wide-bar-label">${label}</span>
+    <div class="wide-bar-track">
+      <div class="wide-bar-fill ${cls}" style="width:${pct}%"></div>
+    </div>
+    <span class="wide-bar-meta">
+      <strong>${cell.count}</strong> / ${cell.total}
+      <span class="muted">(${pct}%)</span>
+    </span>
+  </div>`;
+}
+
 // ── Submissions ─────────────────────────────────────
 
 function renderSubmissions(data) {
@@ -447,27 +470,12 @@ function renderSubmissions(data) {
     const statusClass = row.complete ? 'complete' : row.totalScores > 0 ? 'partial' : 'empty';
     const statusLabel = row.complete ? 'Complete' : row.totalScores > 0 ? 'Partial' : 'Not started';
 
-    const chip = (label, cell) => {
-      if (!cell) {
-        return `<div class="chip">
-          <div class="chip-label">${label}</div>
-          <div class="chip-value muted">–</div>
-          <div class="chip-bar empty"><div style="width:0%"></div></div>
-        </div>`;
-      }
-      const pct = cell.percent || 0;
-      const cls = pct === 0 ? 'empty' : pct < 100 ? 'partial' : '';
-      return `<div class="chip">
-        <div class="chip-label">${label}</div>
-        <div class="chip-value">${cell.count}<span class="muted">/${cell.total}</span></div>
-        <div class="chip-bar ${cls}"><div style="width:${pct}%"></div></div>
-      </div>`;
-    };
-
-    const monthlyChips = ['SEPT','OCT','NOV','DEC'].map(k =>
-      chip(k, t1 ? t1.monthly[k] : null)).join('');
-    const paperChips = ['P1','P2','P3'].map(k =>
-      chip(k, t1 ? t1.papers[k] : null)).join('');
+    const monthlyBars = ['SEPT','OCT','NOV','DEC']
+      .map(k => renderWideBar(k, t1 ? t1.monthly[k] : null))
+      .join('');
+    const paperBars = ['P1','P2','P3']
+      .map(k => renderWideBar(k, t1 ? t1.papers[k] : null))
+      .join('');
 
     card.innerHTML = `
       <div class="submission-head">
@@ -478,8 +486,11 @@ function renderSubmissions(data) {
         <span class="status-pill ${statusClass}">${statusLabel}</span>
       </div>
 
-      <div class="chip-group">${monthlyChips}</div>
-      <div class="chip-group">${paperChips}</div>
+      <div class="assignment-section-title">Continuous Assessment — Term 1</div>
+      <div class="wide-bars">${monthlyBars}</div>
+
+      <div class="assignment-section-title" style="margin-top:12px">End-of-Term Papers — Term 1</div>
+      <div class="wide-bars">${paperBars}</div>
 
       <div class="overall-row">
         <div class="overall-bar ${statusClass}">
@@ -494,6 +505,9 @@ function renderSubmissions(data) {
       </div>`;
     container.appendChild(card);
   });
+
+  document.getElementById('searchInput').oninput = filterSubmissions;
+  document.getElementById('statusFilter').onchange = filterSubmissions;
 }
 
 function filterSubmissions() {
@@ -591,7 +605,6 @@ async function openTeacherModal(email) {
   document.getElementById('modalBody').innerHTML = '<p class="muted">Fetching assignments…</p>';
   document.getElementById('modalGroupTabs').style.display = 'none';
 
-  // Reset to Summary view
   state.modalView = 'summary';
   const viewTabs = document.getElementById('modalViewTabs');
   if (viewTabs) {
@@ -676,29 +689,12 @@ function renderModalAssignments() {
 function renderAssignmentCard(a) {
   const t1 = a.perTerm && a.perTerm.term1 ? a.perTerm.term1 : null;
 
-  const chip = (label, cell) => {
-    if (!cell) {
-      return `<div class="chip">
-        <div class="chip-label">${label}</div>
-        <div class="chip-value muted">–</div>
-        <div class="chip-bar empty"><div style="width:0%"></div></div>
-      </div>`;
-    }
-    const pct = cell.percent || 0;
-    const cls = pct === 0 ? 'empty' : pct < 100 ? 'partial' : '';
-    return `<div class="chip">
-      <div class="chip-label">${label}</div>
-      <div class="chip-value">${cell.count}<span class="muted">/${cell.total}</span></div>
-      <div class="chip-bar ${cls}"><div style="width:${pct}%"></div></div>
-    </div>`;
-  };
-
-  const monthsChips = t1
-    ? ['SEPT','OCT','NOV','DEC'].map(k => chip(k, t1.monthly[k])).join('')
-    : '';
-  const papersChips = t1
-    ? ['P1','P2','P3'].map(k => chip(k, t1.papers[k])).join('')
-    : '';
+  const monthlyBars = ['SEPT','OCT','NOV','DEC']
+    .map(k => renderWideBar(k, t1 ? t1.monthly[k] : null))
+    .join('');
+  const paperBars = ['P1','P2','P3']
+    .map(k => renderWideBar(k, t1 ? t1.papers[k] : null))
+    .join('');
 
   return `
     <div class="assignment-card">
@@ -711,10 +707,10 @@ function renderAssignmentCard(a) {
       </div>
 
       <div class="assignment-section-title">Continuous Assessment — Term 1</div>
-      <div class="chip-group">${monthsChips}</div>
+      <div class="wide-bars">${monthlyBars}</div>
 
-      <div class="assignment-section-title">End-of-Term Papers — Term 1</div>
-      <div class="chip-group">${papersChips}</div>
+      <div class="assignment-section-title" style="margin-top:12px">End-of-Term Papers — Term 1</div>
+      <div class="wide-bars">${paperBars}</div>
     </div>`;
 }
 
