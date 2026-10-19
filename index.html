@@ -30,7 +30,6 @@
     </div>
   </header>
 
-  <!-- ═══ SIDEBAR BACKDROP ═══ -->
   <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
 
   <!-- ═══ SIDEBAR ═══ -->
@@ -121,7 +120,7 @@
         </div>
       </div>
 
-      <!-- ═══ OVERVIEW ═══ -->
+      <!-- OVERVIEW -->
       <div id="view-overview" class="view">
         <div class="kpi-strip">
           <div class="kpi-card">
@@ -170,7 +169,7 @@
         </div>
       </div>
 
-      <!-- ═══ SUBMISSIONS ═══ -->
+      <!-- SUBMISSIONS -->
       <div id="view-submissions" class="view hidden">
         <div class="filter-bar">
           <input type="search" id="searchInput" placeholder="Search class or subject…">
@@ -188,7 +187,7 @@
         </div>
       </div>
 
-      <!-- ═══ TEACHERS ═══ -->
+      <!-- TEACHERS -->
       <div id="view-teachers" class="view hidden">
         <div class="filter-bar">
           <input type="search" id="teacherSearch" placeholder="Search teacher by name or email…">
@@ -203,7 +202,7 @@
     </section>
   </main>
 
-  <!-- ═══ TEACHER DETAIL MODAL ═══ -->
+  <!-- ═══ TEACHER MODAL ═══ -->
   <div id="teacherModal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-head">
@@ -221,26 +220,22 @@
 
       <div class="modal-stats" id="modalSummary"></div>
 
-      <!-- Group tabs (Regular / ODL) -->
       <div class="modal-tabs" id="modalGroupTabs" style="display:none">
         <button class="modal-tab active" data-group="Regular">Regular</button>
         <button class="modal-tab" data-group="ODL">ODL</button>
       </div>
 
-      <!-- View tabs: Summary / Assignments -->
       <div class="modal-view-tabs" id="modalViewTabs">
         <button class="modal-view-tab active" data-view="summary">Summary</button>
         <button class="modal-view-tab" data-view="assignments">Assignments</button>
       </div>
 
-      <!-- Chart view -->
       <div id="modalView-summary" class="modal-view">
         <div class="modal-chart-wrap">
           <canvas id="teacherChart"></canvas>
         </div>
       </div>
 
-      <!-- Assignments view -->
       <div id="modalView-assignments" class="modal-view hidden">
         <div class="modal-body" id="modalBody"></div>
       </div>
