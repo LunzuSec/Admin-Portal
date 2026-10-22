@@ -1,8 +1,5 @@
 /* Lunzu Secondary — Admin Dashboard */
 
-// ═══════════════════════════════════════════════════════════
-// CONFIGURATION — set the API URL here (once, at deployment)
-// ═══════════════════════════════════════════════════════════
 const API_URL = 'https://script.google.com/macros/s/AKfycbzB5TYa8Xbw5OT90Fh9UC3LoCYJaqxBkAPuBtrQFNNVB3sMcUfrlG0drVn3xxf8SeZoKg/exec';
 
 (function ensureChartJS() {
@@ -13,8 +10,10 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzB5TYa8Xbw5OT90Fh9UC3L
   document.head.appendChild(alt);
 })();
 
-const CACHE_KEY = 'lss_dashboard_cache_v7';
+const CACHE_KEY = 'lss_dashboard_cache_v9';
 const CACHE_TTL_MS = 5 * 60 * 1000;
+
+const TERM1_COLUMNS = ['SEPT', 'OCT', 'NOV', 'DEC', 'PAPER 1', 'PAPER 2', 'PAPER 3'];
 
 const state = {
   apiUrl: API_URL,
@@ -87,7 +86,7 @@ function clearSkeletons() {
     const el = document.getElementById(id);
     if (el) el.querySelectorAll('.skeleton-block').forEach(b => b.remove());
   });
-  ['kpiFiles','kpiSubmitted','kpiPartial','kpiEmpty'].forEach(id => {
+  ['kpiFiles','kpiAll7','kpiPartial','kpiNone','kpiEmpty'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.querySelectorAll('.skeleton').forEach(s => s.remove());
   });
@@ -96,9 +95,9 @@ function clearSkeletons() {
 // ── View switching ──────────────────────────────────
 
 const VIEW_TITLES = {
-  overview:    { title: 'Overview', subtitle: 'Submission status across all classes' },
-  submissions: { title: 'Submissions', subtitle: 'Per class-subject monthly and paper entry status' },
-  teachers:    { title: 'Teachers', subtitle: 'Click a teacher to inspect their assignments' }
+  overview:    { title: 'Overview', subtitle: 'Term 1 column-level submission progress' },
+  submissions: { title: 'Submissions', subtitle: 'Per-column submission detail for every class-subject' },
+  teachers:    { title: 'Teachers', subtitle: 'Click a teacher to see their column-level progress' }
 };
 
 function switchView(view) {
@@ -352,24 +351,39 @@ function writeCache() {
 function renderKpis(summary) {
   const t = state.activeGroup === 'all'
     ? summary.totals
-    : (summary.totals.byGroup[state.activeGroup] || { files: 0, submitted: 0, partial: 0, empty: 0 });
+    : (summary.totals.byGroup[state.activeGroup] || {
+        files: 0, all7: 0, partial: 0, none: 0, empty: 0,
+        totalTicked: 0, totalPossibleTicks: 0
+      });
+
   document.getElementById('kpiFiles').textContent = t.files;
-  document.getElementById('kpiSubmitted').textContent = t.submitted;
+  document.getElementById('kpiAll7').textContent = t.all7;
   document.getElementById('kpiPartial').textContent = t.partial;
+  document.getElementById('kpiNone').textContent = t.none;
   document.getElementById('kpiEmpty').textContent = t.empty;
+
+  const pct = t.totalPossibleTicks
+    ? Math.round((t.totalTicked / t.totalPossibleTicks) * 100)
+    : 0;
+  const el = document.getElementById('kpiTicked');
+  if (el) el.textContent = `${t.totalTicked} / ${t.totalPossibleTicks} (${pct}%)`;
 }
 
 function renderQuickStats(summary) {
   const t = summary.totals;
-  const completion = t.files > 0 ? Math.round((t.submitted / t.files) * 100) : 0;
-  document.getElementById('qsCompletion').textContent = completion + '%';
+  const pct = t.totalPossibleTicks
+    ? Math.round((t.totalTicked / t.totalPossibleTicks) * 100)
+    : 0;
+  document.getElementById('qsCompletion').textContent = pct + '%';
   document.getElementById('qsYear').textContent = summary.academicYear || '—';
 
   const teachersData = state.teachers;
   if (teachersData && teachersData.rows) {
     document.getElementById('qsTeachers').textContent = teachersData.rows.length;
-    const totalAssignments = teachersData.rows.reduce((s, r) => s + r.assignments, 0);
-    document.getElementById('qsAssignments').textContent = totalAssignments;
+    const totalTicked = teachersData.rows.reduce((s, r) => s + r.tickedColumns, 0);
+    const totalPossible = teachersData.rows.reduce((s, r) => s + r.possibleColumns, 0);
+    document.getElementById('qsAssignments').textContent =
+      `${totalTicked} / ${totalPossible} cols`;
   }
 }
 
@@ -380,17 +394,18 @@ function renderChart(summary) {
   const classes = Object.keys(byClass)
     .filter(c => state.activeGroup === 'all' || byClass[c].group === state.activeGroup)
     .sort();
-  const complete = classes.map(c => byClass[c].submitted);
+  const all7     = classes.map(c => byClass[c].all7);
   const partial  = classes.map(c => byClass[c].partial);
+  const none     = classes.map(c => byClass[c].none);
   const empty    = classes.map(c => byClass[c].empty);
 
   if (typeof Chart === 'undefined') {
     const wrap = document.querySelector('.chart-wrap');
     if (wrap) {
       wrap.innerHTML = '<table style="width:100%;font-size:13px">' +
-        '<thead><tr><th>Class</th><th>Complete</th><th>Partial</th><th>Not started</th></tr></thead>' +
+        '<thead><tr><th>Class</th><th>7/7 ticked</th><th>Partial</th><th>Unticked</th><th>Empty</th></tr></thead>' +
         '<tbody>' + classes.map((c, i) =>
-          `<tr><td>${c}</td><td>${complete[i]}</td><td>${partial[i]}</td><td>${empty[i]}</td></tr>`
+          `<tr><td>${c}</td><td>${all7[i]}</td><td>${partial[i]}</td><td>${none[i]}</td><td>${empty[i]}</td></tr>`
         ).join('') + '</tbody></table>';
     }
     return;
@@ -404,9 +419,10 @@ function renderChart(summary) {
     data: {
       labels: classes,
       datasets: [
-        { label: 'Complete', data: complete, backgroundColor: '#4d6b3f' },
-        { label: 'Partial', data: partial, backgroundColor: '#b8860b' },
-        { label: 'Not started', data: empty, backgroundColor: '#a0522d' }
+        { label: '7/7 columns ticked', data: all7,    backgroundColor: '#4d6b3f' },
+        { label: 'Partial (1–6)',       data: partial, backgroundColor: '#b8860b' },
+        { label: 'Unticked',            data: none,    backgroundColor: '#a0522d' },
+        { label: 'Empty',               data: empty,   backgroundColor: '#6b7280' }
       ]
     },
     options: {
@@ -444,7 +460,39 @@ function renderWideBar(label, cell) {
   </div>`;
 }
 
+// ── Per-column checkbox pills ──────────────────────
+
+function renderColumnPill(label, cell) {
+  if (!cell) {
+    return `<span class="col-pill col-pill-empty" title="${label}">${label} —</span>`;
+  }
+  const ticked = !!cell.ticked;
+  const pct = cell.percent || 0;
+  const cls = ticked
+    ? 'col-pill-ticked'
+    : (pct > 0 ? 'col-pill-partial' : 'col-pill-empty');
+  const titleText = `${label}: ${cell.count}/${cell.total} students (${pct}%) · ${
+    ticked ? 'Teacher ticked' : 'Not ticked'}`;
+  return `<span class="col-pill ${cls}" title="${titleText}">${label} ${ticked ? '✓' : '—'}</span>`;
+}
+
 // ── Submissions ─────────────────────────────────────
+
+function statusOf(row) {
+  const t = row.term1.ticked;
+  if (t === 7) return 'complete';
+  if (t > 0) return 'partial';
+  if (row.term1.totalScores > 0) return 'in-progress';
+  return 'empty';
+}
+
+function statusLabel(row) {
+  const t = row.term1.ticked;
+  if (t === 7) return '7/7 ticked';
+  if (t > 0) return `${t}/7 ticked`;
+  if (row.term1.totalScores > 0) return 'Unticked';
+  return 'Not started';
+}
 
 function renderSubmissions(data) {
   const container = document.getElementById('submissionsList');
@@ -464,17 +512,14 @@ function renderSubmissions(data) {
     const card = document.createElement('div');
     card.className = 'submission-card';
     card.dataset.search = `${row.class} ${row.subject}`.toLowerCase();
-    card.dataset.status = row.complete ? 'complete' : row.totalScores > 0 ? 'partial' : 'empty';
+    card.dataset.status = statusOf(row);
 
-    const t1 = row.perTerm && row.perTerm.term1 ? row.perTerm.term1 : null;
-    const statusClass = row.complete ? 'complete' : row.totalScores > 0 ? 'partial' : 'empty';
-    const statusLabel = row.complete ? 'Complete' : row.totalScores > 0 ? 'Partial' : 'Not started';
+    const t1 = row.term1;
+    const sLabel = statusLabel(row);
+    const sCls = statusOf(row);
 
-    const monthlyBars = ['SEPT','OCT','NOV','DEC']
-      .map(k => renderWideBar(k, t1 ? t1.monthly[k] : null))
-      .join('');
-    const paperBars = ['P1','P2','P3']
-      .map(k => renderWideBar(k, t1 ? t1.papers[k] : null))
+    const pills = TERM1_COLUMNS
+      .map(k => renderColumnPill(k, t1.columns[k]))
       .join('');
 
     card.innerHTML = `
@@ -483,20 +528,17 @@ function renderSubmissions(data) {
           ${row.class} — ${row.subject}
           <small>${row.students} students</small>
         </div>
-        <span class="status-pill ${statusClass}">${statusLabel}</span>
+        <span class="status-pill ${sCls}">${sLabel}</span>
       </div>
 
-      <div class="assignment-section-title">Continuous Assessment — Term 1</div>
-      <div class="wide-bars">${monthlyBars}</div>
-
-      <div class="assignment-section-title" style="margin-top:12px">End-of-Term Papers — Term 1</div>
-      <div class="wide-bars">${paperBars}</div>
+      <div class="assignment-section-title">Term 1 columns — ticked status</div>
+      <div class="col-pill-row">${pills}</div>
 
       <div class="overall-row">
-        <div class="overall-bar ${statusClass}">
-          <div style="width:${Math.min(100, row.percentComplete)}%"></div>
+        <div class="overall-bar ${sCls}">
+          <div style="width:${Math.round((t1.ticked / 7) * 100)}%"></div>
         </div>
-        <span class="overall-value">${row.percentComplete}%</span>
+        <span class="overall-value">${t1.ticked}/7 columns</span>
       </div>
 
       <div class="submission-footer">
@@ -527,7 +569,7 @@ function renderTeachers(data) {
   if (!container) return;
   container.innerHTML = '';
 
-  const filtered = data.rows.sort((a, b) => a.teacherName.localeCompare(b.teacherName));
+  const filtered = data.rows.slice().sort((a, b) => a.teacherName.localeCompare(b.teacherName));
 
   if (filtered.length === 0) {
     container.innerHTML = '<p class="muted">No teachers configured.</p>';
@@ -546,6 +588,10 @@ function renderTeachers(data) {
       .join('')
       .toUpperCase();
 
+    const pct = row.possibleColumns
+      ? Math.round((row.tickedColumns / row.possibleColumns) * 100)
+      : 0;
+
     card.innerHTML = `
       <div class="teacher-head">
         <div class="avatar">${initials}</div>
@@ -557,24 +603,24 @@ function renderTeachers(data) {
 
       <div class="teacher-stats">
         <div class="teacher-stat">
-          <div class="teacher-stat-label">Assigned</div>
+          <div class="teacher-stat-label">Assignments</div>
           <div class="teacher-stat-value">${row.assignments}</div>
         </div>
         <div class="teacher-stat">
-          <div class="teacher-stat-label">Complete</div>
-          <div class="teacher-stat-value good">${row.complete}</div>
+          <div class="teacher-stat-label">7/7 files</div>
+          <div class="teacher-stat-value good">${row.all7}</div>
         </div>
         <div class="teacher-stat">
-          <div class="teacher-stat-label">Not started</div>
-          <div class="teacher-stat-value bad">${row.empty}</div>
+          <div class="teacher-stat-label">Columns ticked</div>
+          <div class="teacher-stat-value">${row.tickedColumns}</div>
         </div>
       </div>
 
       <div class="overall-row">
-        <div class="overall-bar ${row.avgPercent === 0 ? 'empty' : row.avgPercent < 100 ? 'partial' : ''}">
-          <div style="width:${row.avgPercent}%"></div>
+        <div class="overall-bar ${pct === 0 ? 'empty' : pct < 100 ? 'partial' : ''}">
+          <div style="width:${pct}%"></div>
         </div>
-        <span class="overall-value">${row.avgPercent}%</span>
+        <span class="overall-value">${pct}%</span>
       </div>
 
       <div class="teacher-open">
@@ -642,8 +688,8 @@ async function openTeacherModal(email) {
 
     document.getElementById('modalSummary').innerHTML =
       `<div class="modal-stat"><div class="modal-stat-label">Assignments</div><div class="modal-stat-value">${data.assignmentCount}</div></div>
-       <div class="modal-stat"><div class="modal-stat-label">Scores submitted</div><div class="modal-stat-value">${data.totalScores} / ${data.possibleScores}</div></div>
-       <div class="modal-stat"><div class="modal-stat-label">Overall completion</div><div class="modal-stat-value">${data.avgPercent}%</div></div>`;
+       <div class="modal-stat"><div class="modal-stat-label">Columns ticked</div><div class="modal-stat-value">${data.tickedColumns} / ${data.possibleColumns}</div></div>
+       <div class="modal-stat"><div class="modal-stat-label">Avg fill</div><div class="modal-stat-value">${data.avgFillPercent}%</div></div>`;
 
     const hasRegular = data.assignments.some(a => a.group === 'Regular');
     const hasODL = data.assignments.some(a => a.group === 'ODL');
@@ -687,30 +733,34 @@ function renderModalAssignments() {
 }
 
 function renderAssignmentCard(a) {
-  const t1 = a.perTerm && a.perTerm.term1 ? a.perTerm.term1 : null;
+  const t1 = a.term1;
 
-  const monthlyBars = ['SEPT','OCT','NOV','DEC']
-    .map(k => renderWideBar(k, t1 ? t1.monthly[k] : null))
+  const pills = TERM1_COLUMNS
+    .map(k => renderColumnPill(k, t1.columns[k]))
     .join('');
-  const paperBars = ['P1','P2','P3']
-    .map(k => renderWideBar(k, t1 ? t1.papers[k] : null))
-    .join('');
+
+  const sCls = t1.ticked === 7 ? 'complete'
+             : t1.ticked > 0   ? 'partial'
+             : 'empty';
+  const sLabel = t1.ticked === 7 ? '7/7 ticked'
+               : t1.ticked > 0   ? `${t1.ticked}/7 ticked`
+               : (t1.totalScores > 0 ? 'Unticked' : 'Not started');
 
   return `
     <div class="assignment-card">
       <div class="assignment-head">
         <div>
           <div class="assignment-title">${a.class} — ${a.subject}</div>
-          <div class="assignment-meta">${a.students} students · ${a.totalScores} / ${a.possible} scores</div>
+          <div class="assignment-meta">
+            ${a.students} students · ${t1.ticked}/7 columns ticked
+            <span class="status-pill ${sCls}" style="margin-left:8px">${sLabel}</span>
+          </div>
         </div>
         <a href="${a.fileUrl}" target="_blank" rel="noopener">Open sheet →</a>
       </div>
 
-      <div class="assignment-section-title">Continuous Assessment — Term 1</div>
-      <div class="wide-bars">${monthlyBars}</div>
-
-      <div class="assignment-section-title" style="margin-top:12px">End-of-Term Papers — Term 1</div>
-      <div class="wide-bars">${paperBars}</div>
+      <div class="assignment-section-title">Term 1 columns — ticked status</div>
+      <div class="col-pill-row">${pills}</div>
     </div>`;
 }
 
@@ -732,15 +782,15 @@ function renderTeacherChart() {
         '<table style="width:100%;font-size:12px">' +
           '<thead><tr>' +
             '<th style="text-align:left;padding:6px">Class — Subject</th>' +
-            '<th style="text-align:right;padding:6px">Complete</th>' +
-            '<th style="text-align:right;padding:6px">Scores</th>' +
+            '<th style="text-align:right;padding:6px">Columns ticked</th>' +
+            '<th style="text-align:right;padding:6px">Avg fill</th>' +
           '</tr></thead>' +
           '<tbody>' +
             filtered.map(a => `
               <tr>
                 <td style="padding:6px;border-top:1px solid #e5e1d8">${a.class} — ${a.subject}</td>
-                <td style="padding:6px;border-top:1px solid #e5e1d8;text-align:right">${a.percentComplete}%</td>
-                <td style="padding:6px;border-top:1px solid #e5e1d8;text-align:right">${a.totalScores} / ${a.possible}</td>
+                <td style="padding:6px;border-top:1px solid #e5e1d8;text-align:right">${a.term1.ticked}/7</td>
+                <td style="padding:6px;border-top:1px solid #e5e1d8;text-align:right">${a.term1.fillPercent}%</td>
               </tr>`).join('') +
           '</tbody>' +
         '</table>';
@@ -754,10 +804,10 @@ function renderTeacherChart() {
   }
 
   const labels = filtered.map(a => `${a.class} — ${a.subject}`);
-  const values = filtered.map(a => a.percentComplete);
+  const values = filtered.map(a => Math.round((a.term1.ticked / 7) * 100));
   const colors = filtered.map(a =>
-    a.complete ? '#4d6b3f' :
-    a.totalScores > 0 ? '#b8860b' :
+    a.term1.ticked === 7 ? '#4d6b3f' :
+    a.term1.ticked > 0   ? '#b8860b' :
     '#a0522d'
   );
 
@@ -766,7 +816,7 @@ function renderTeacherChart() {
     data: {
       labels,
       datasets: [{
-        label: 'Completion %',
+        label: 'Columns ticked %',
         data: values,
         backgroundColor: colors,
         borderRadius: 4,
@@ -804,7 +854,7 @@ function renderTeacherChart() {
           callbacks: {
             label: ctx => {
               const a = filtered[ctx.dataIndex];
-              return `${a.percentComplete}% · ${a.totalScores} / ${a.possible} scores`;
+              return `${a.term1.ticked}/7 columns · ${a.term1.fillPercent}% fill`;
             }
           }
         }
@@ -833,8 +883,6 @@ function formatDate(iso) {
     });
   } catch (e) { return iso; }
 }
-
-// ── Responsive chart redraw ─────────────────────────
 
 window.addEventListener('resize', () => {
   if (state.teacherChart) state.teacherChart.resize();
