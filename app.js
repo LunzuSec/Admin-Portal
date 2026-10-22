@@ -14,6 +14,8 @@ const CACHE_KEY = 'lss_dashboard_cache_v10';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const TERM1_COLUMNS = ['SEPT', 'OCT', 'NOV', 'DEC', 'PAPER 1', 'PAPER 2', 'PAPER 3'];
+const MONTHLY_COLUMNS = ['SEPT', 'OCT', 'NOV', 'DEC'];
+const PAPER_COLUMNS = ['PAPER 1', 'PAPER 2', 'PAPER 3'];
 
 const state = {
   apiUrl: API_URL,
@@ -236,6 +238,26 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('searchInput').addEventListener('input', filterSubmissions);
   document.getElementById('statusFilter').addEventListener('change', filterSubmissions);
   document.getElementById('teacherSearch').addEventListener('input', filterTeachers);
+
+  // ── Report dialog wiring ──
+  document.getElementById('reportBtn').addEventListener('click', openReportDialog);
+  document.getElementById('reportDialogClose').addEventListener('click', closeReportDialog);
+  document.getElementById('reportCancelBtn').addEventListener('click', closeReportDialog);
+  document.getElementById('reportGenerateBtn').addEventListener('click', generateReport);
+  document.getElementById('reportDialog').addEventListener('click', e => {
+    if (e.target.id === 'reportDialog') closeReportDialog();
+  });
+
+  // Show/hide the "column" field based on report type
+  document.getElementById('reportTypeOptions').addEventListener('change', e => {
+    const colField = document.getElementById('reportColumnField');
+    const type = e.target.value;
+    if (type === 'teachers') {
+      colField.style.display = 'none';
+    } else {
+      colField.style.display = '';
+    }
+  });
 });
 
 // ── Data loading ────────────────────────────────────
@@ -437,25 +459,16 @@ function renderChart(summary) {
 }
 
 // ── Column bar renderer ─────────────────────────────
-//
-// One row per Term 1 column:
-//   [LABEL] [──────────── long bar ────────────] [X / Y (Z%)] [✓ Completed | In progress | Not started]
-//
+
 function renderColumnBar(label, cell) {
-  // cell = { ticked, count, total, percent } or null
   const safeCell = cell || { ticked: false, count: 0, total: 0, percent: 0 };
   const pct = Math.max(0, Math.min(100, safeCell.percent || 0));
   const count = safeCell.count || 0;
   const total = safeCell.total || 0;
   const ticked = !!safeCell.ticked;
 
-  // Bar color: filled columns go green, empty go red, partial go amber
   const barCls = pct === 0 ? 'empty' : pct < 100 ? 'partial' : '';
 
-  // Status pill:
-  //   ticked → "✓ Completed"    (green)
-  //   has fill, not ticked → "In progress"  (amber)
-  //   no fill, not ticked  → "Not started"  (red)
   let statusCls, statusText;
   if (ticked) {
     statusCls = 'column-status-complete';
@@ -527,7 +540,6 @@ function renderSubmissions(data) {
       .map(k => renderColumnBar(k, t1.columns[k]))
       .join('');
 
-    // Overall bar: fraction of columns marked Completed (ticked)
     const columnsCompleted = t1.ticked;
     const overallPct = Math.round((columnsCompleted / 7) * 100);
     const overallCls = columnsCompleted === 7 ? ''
@@ -884,6 +896,289 @@ function closeTeacherModal() {
     state.teacherChart = null;
   }
   state.modalData = null;
+}
+
+// ═══════════════════════════════════════════════════
+// PDF REPORT — download via browser print
+// ═══════════════════════════════════════════════════
+
+function openReportDialog() {
+  document.getElementById('reportDialog').classList.remove('hidden');
+  document.getElementById('reportTypeOptions').querySelector('input[value="submissions"]').checked = true;
+  document.getElementById('reportColumnOptions').querySelector('input[value="all"]').checked = true;
+  document.getElementById('reportGroupOptions').querySelector('input[value="all"]').checked = true;
+  document.getElementById('reportColumnField').style.display = '';
+}
+
+function closeReportDialog() {
+  document.getElementById('reportDialog').classList.add('hidden');
+}
+
+function generateReport() {
+  const type = document.querySelector('input[name="reportType"]:checked').value;
+  const colChoice = document.querySelector('input[name="reportColumn"]:checked').value;
+  const group = document.querySelector('input[name="reportGroup"]:checked').value;
+
+  const columns = colChoice === 'monthly' ? MONTHLY_COLUMNS
+                : colChoice === 'papers'  ? PAPER_COLUMNS
+                : TERM1_COLUMNS;
+
+  const colLabel = colChoice === 'monthly' ? 'Monthly (SEPT, OCT, NOV, DEC)'
+                 : colChoice === 'papers'  ? 'Papers (PAPER 1, PAPER 2, PAPER 3)'
+                 : 'All columns';
+
+  const groupLabel = group === 'all' ? 'Regular + ODL' : group;
+
+  closeReportDialog();
+
+  if (type === 'submissions') {
+    buildSubmissionsReport(columns, colLabel, groupLabel, group);
+  } else {
+    buildTeachersReport(columns, colLabel, groupLabel, group);
+  }
+
+  // Let the DOM update, then trigger print
+  setTimeout(() => {
+    runPrint();
+  }, 100);
+}
+
+// ── Report builders ─────────────────────────────────
+
+function reportHeaderHtml(subtitle, filters) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-GB', {
+    day: '2-digit', month: 'long', year: 'numeric'
+  });
+  const timeStr = now.toLocaleTimeString('en-GB', {
+    hour: '2-digit', minute: '2-digit'
+  });
+
+  return `
+    <div class="print-header">
+      <div class="print-header-left">
+        <div class="print-school">Lunzu Secondary School</div>
+        <div class="print-dept">Examination Department</div>
+        <div class="print-subtitle">${subtitle}</div>
+      </div>
+      <div class="print-header-right">
+        <div class="print-date">Generated: ${dateStr} · ${timeStr}</div>
+        <div class="print-year">Academic Year ${state.summary?.academicYear || ''} · Term ${state.summary?.activeTerm || 1}</div>
+      </div>
+    </div>
+    <div class="print-filters">
+      <span><strong>Filters:</strong></span>
+      <span>Group: <strong>${filters.groupLabel}</strong></span>
+      <span>Columns: <strong>${filters.colLabel}</strong></span>
+    </div>
+    <hr class="print-rule">
+  `;
+}
+
+function reportFooterHtml() {
+  return `
+    <div class="print-footer">
+      <div>Lunzu Secondary School — Examination Department · Confidential</div>
+      <div>Generated from the Admin Dashboard on ${new Date().toLocaleString('en-GB')}</div>
+    </div>
+  `;
+}
+
+// Build a compact bar-and-status row for print
+function printColumnRow(label, cell) {
+  const safeCell = cell || { ticked: false, count: 0, total: 0, percent: 0 };
+  const pct = Math.max(0, Math.min(100, safeCell.percent || 0));
+  const count = safeCell.count || 0;
+  const total = safeCell.total || 0;
+  const ticked = !!safeCell.ticked;
+
+  let statusText, statusCls;
+  if (ticked) {
+    statusText = '✓ Completed';
+    statusCls = 'print-status-complete';
+  } else if (count > 0) {
+    statusText = 'In progress';
+    statusCls = 'print-status-partial';
+  } else {
+    statusText = 'Not started';
+    statusCls = 'print-status-empty';
+  }
+
+  return `
+    <tr class="print-col-row">
+      <td class="print-col-label">${label}</td>
+      <td class="print-col-bar-cell">
+        <div class="print-bar-track">
+          <div class="print-bar-fill ${pct === 0 ? 'empty' : pct < 100 ? 'partial' : ''}" style="width:${pct}%"></div>
+        </div>
+      </td>
+      <td class="print-col-meta">
+        <strong>${count}</strong> / ${total} <span class="print-muted">(${pct}%)</span>
+      </td>
+      <td class="print-col-status ${statusCls}">${statusText}</td>
+    </tr>
+  `;
+}
+
+function buildSubmissionsReport(columns, colLabel, groupLabel, group) {
+  const rows = state.submissions.rows
+    .filter(r => group === 'all' || r.group === group)
+    .sort((a, b) => a.class.localeCompare(b.class) || a.subject.localeCompare(b.subject));
+
+  const totalFiles = rows.length;
+  const totalCompleted = rows.reduce((s, r) => s + r.term1.ticked, 0);
+  const possible = rows.length * 7;
+
+  const blocks = rows.map(row => {
+    const columnRows = columns
+      .map(k => printColumnRow(k, row.term1.columns[k]))
+      .join('');
+
+    const columnsCompleted = row.term1.ticked;
+    const sLabel = columnsCompleted === 7 ? '7/7 completed'
+                 : columnsCompleted > 0   ? `${columnsCompleted}/7 completed`
+                 : (row.term1.totalScores > 0 ? 'Unticked' : 'Not started');
+    const sCls = columnsCompleted === 7 ? 'complete'
+               : columnsCompleted > 0   ? 'partial'
+               : 'empty';
+
+    return `
+      <div class="print-file-block">
+        <div class="print-file-head">
+          <div class="print-file-title">${row.class} — ${row.subject}</div>
+          <div class="print-file-stats">
+            <span>${row.students} students</span>
+            <span class="print-pill ${sCls}">${sLabel}</span>
+          </div>
+        </div>
+        <table class="print-col-table">
+          <thead>
+            <tr>
+              <th>Column</th>
+              <th>Progress</th>
+              <th>Entered</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>${columnRows}</tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
+
+  const html = `
+    <div class="print-page">
+      ${reportHeaderHtml('Submissions Report', { groupLabel, colLabel })}
+      <div class="print-summary">
+        <div class="print-summary-item">
+          <div class="print-summary-value">${totalFiles}</div>
+          <div class="print-summary-label">Files</div>
+        </div>
+        <div class="print-summary-item">
+          <div class="print-summary-value">${totalCompleted} / ${possible}</div>
+          <div class="print-summary-label">Columns completed</div>
+        </div>
+        <div class="print-summary-item">
+          <div class="print-summary-value">${possible ? Math.round((totalCompleted / possible) * 100) : 0}%</div>
+          <div class="print-summary-label">Overall completion</div>
+        </div>
+      </div>
+      ${blocks}
+      ${reportFooterHtml()}
+    </div>
+  `;
+
+  document.getElementById('printContent').innerHTML = html;
+}
+
+function buildTeachersReport(columns, colLabel, groupLabel, group) {
+  // Filter assignments by group; sum ticked counts per teacher
+  const teacherRows = state.teachers.rows
+    .slice()
+    .sort((a, b) => a.teacherName.localeCompare(b.teacherName));
+
+  const blocks = teacherRows.map(t => {
+    // For each teacher, we need the per-file assignment detail.
+    // The teachers list endpoint only gives aggregate totals;
+    // we don't have per-file detail on teachers view (it requires
+    // an extra fetch per teacher). For the print report, we show
+    // a summary table per teacher with their aggregate stats.
+    const pct = t.possibleColumns
+      ? Math.round((t.tickedColumns / t.possibleColumns) * 100)
+      : 0;
+    const sCls = t.all7 === t.assignments ? 'complete'
+               : t.tickedColumns > 0      ? 'partial'
+               : 'empty';
+
+    return `
+      <div class="print-file-block">
+        <div class="print-file-head">
+          <div class="print-file-title">${t.teacherName}</div>
+          <div class="print-file-stats">
+            <span>${t.teacherEmail}</span>
+            <span class="print-pill ${sCls}">${pct}% overall</span>
+          </div>
+        </div>
+        <table class="print-col-table print-teacher-table">
+          <thead>
+            <tr>
+              <th>Assignments</th>
+              <th>7/7 completed</th>
+              <th>Partial</th>
+              <th>Unticked</th>
+              <th>Empty</th>
+              <th>Columns done</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${t.assignments}</td>
+              <td>${t.all7}</td>
+              <td>${t.partial}</td>
+              <td>${t.none}</td>
+              <td>${t.empty}</td>
+              <td><strong>${t.tickedColumns}</strong> / ${t.possibleColumns}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
+
+  const totalTicked = teacherRows.reduce((s, t) => s + t.tickedColumns, 0);
+  const totalPossible = teacherRows.reduce((s, t) => s + t.possibleColumns, 0);
+
+  const html = `
+    <div class="print-page">
+      ${reportHeaderHtml('Teachers Report', { groupLabel, colLabel: 'N/A (aggregate)' })}
+      <div class="print-summary">
+        <div class="print-summary-item">
+          <div class="print-summary-value">${teacherRows.length}</div>
+          <div class="print-summary-label">Teachers</div>
+        </div>
+        <div class="print-summary-item">
+          <div class="print-summary-value">${totalTicked} / ${totalPossible}</div>
+          <div class="print-summary-label">Columns done</div>
+        </div>
+        <div class="print-summary-item">
+          <div class="print-summary-value">${totalPossible ? Math.round((totalTicked / totalPossible) * 100) : 0}%</div>
+          <div class="print-summary-label">Overall completion</div>
+        </div>
+      </div>
+      ${blocks}
+      ${reportFooterHtml()}
+    </div>
+  `;
+
+  document.getElementById('printContent').innerHTML = html;
+}
+
+function runPrint() {
+  document.body.classList.add('printing');
+  window.print();
+  setTimeout(() => {
+    document.body.classList.remove('printing');
+  }, 300);
 }
 
 // ── Utilities ───────────────────────────────────────
