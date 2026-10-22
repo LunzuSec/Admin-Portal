@@ -107,10 +107,15 @@
           <h2 id="viewTitle">Overview</h2>
           <p class="muted" id="viewSubtitle">Term 1 column-level submission progress</p>
         </div>
-        <div class="group-tabs" id="groupTabs">
-          <button class="group-tab active" data-group="all">All</button>
-          <button class="group-tab" data-group="Regular">Regular</button>
-          <button class="group-tab" data-group="ODL">ODL</button>
+        <div class="topbar-right">
+          <button class="btn-report" id="reportBtn">
+            <span class="report-icon">⬇</span> Download Report
+          </button>
+          <div class="group-tabs" id="groupTabs">
+            <button class="group-tab active" data-group="all">All</button>
+            <button class="group-tab" data-group="Regular">Regular</button>
+            <button class="group-tab" data-group="ODL">ODL</button>
+          </div>
         </div>
       </div>
 
@@ -122,14 +127,14 @@
             <div class="kpi-foot muted">across all classes</div>
           </div>
           <div class="kpi-card good">
-            <div class="kpi-label">7/7 ticked</div>
+            <div class="kpi-label">7/7 completed</div>
             <div class="kpi-value" id="kpiAll7"><span class="skeleton skeleton-text">000</span></div>
             <div class="kpi-foot muted">all Term 1 columns done</div>
           </div>
           <div class="kpi-card warn">
             <div class="kpi-label">Partial</div>
             <div class="kpi-value" id="kpiPartial"><span class="skeleton skeleton-text">000</span></div>
-            <div class="kpi-foot muted">1–6 columns ticked</div>
+            <div class="kpi-foot muted">1–6 columns completed</div>
           </div>
           <div class="kpi-card bad">
             <div class="kpi-label">Unticked</div>
@@ -146,7 +151,7 @@
         <div class="overview-grid">
           <div class="panel chart-panel">
             <div class="panel-head">
-              <h3>Columns ticked — by class</h3>
+              <h3>Columns completed — by class</h3>
             </div>
             <div class="chart-wrap">
               <canvas id="classChart"></canvas>
@@ -173,7 +178,7 @@
           <input type="search" id="searchInput" placeholder="Search class or subject…">
           <select id="statusFilter">
             <option value="all">All statuses</option>
-            <option value="complete">7/7 ticked</option>
+            <option value="complete">7/7 completed</option>
             <option value="partial">Partial</option>
             <option value="in-progress">Unticked</option>
             <option value="empty">Empty</option>
@@ -237,6 +242,91 @@
         <div class="modal-body" id="modalBody"></div>
       </div>
     </div>
+  </div>
+
+  <!-- ═══════════ REPORT DIALOG ═══════════ -->
+  <div id="reportDialog" class="modal hidden">
+    <div class="modal-content report-dialog-content">
+      <div class="modal-head">
+        <h3 style="margin:0;font-size:16px;font-weight:600;">Download Report</h3>
+        <button id="reportDialogClose" class="btn-close" aria-label="Close">×</button>
+      </div>
+
+      <div class="report-dialog-body">
+        <p class="muted" style="margin:0 0 18px;">
+          Choose what to include in the PDF report. The browser's print dialog will open — select
+          <strong>Save as PDF</strong> to download.
+        </p>
+
+        <div class="report-field">
+          <label class="report-label">Report type</label>
+          <div class="report-options" id="reportTypeOptions">
+            <label class="report-radio">
+              <input type="radio" name="reportType" value="submissions" checked>
+              <span>Submissions</span>
+              <small>Per class-subject column progress</small>
+            </label>
+            <label class="report-radio">
+              <input type="radio" name="reportType" value="teachers">
+              <span>Teachers</span>
+              <small>Per teacher column breakdown</small>
+            </label>
+          </div>
+        </div>
+
+        <div class="report-field" id="reportColumnField">
+          <label class="report-label">Which columns?</label>
+          <div class="report-options" id="reportColumnOptions">
+            <label class="report-radio">
+              <input type="radio" name="reportColumn" value="all" checked>
+              <span>All columns</span>
+              <small>SEPT + OCT + NOV + DEC + P1 + P2 + P3</small>
+            </label>
+            <label class="report-radio">
+              <input type="radio" name="reportColumn" value="monthly">
+              <span>Monthly only</span>
+              <small>SEPT · OCT · NOV · DEC</small>
+            </label>
+            <label class="report-radio">
+              <input type="radio" name="reportColumn" value="papers">
+              <span>Papers only</span>
+              <small>PAPER 1 · PAPER 2 · PAPER 3</small>
+            </label>
+          </div>
+        </div>
+
+        <div class="report-field">
+          <label class="report-label">Group</label>
+          <div class="report-options" id="reportGroupOptions">
+            <label class="report-radio">
+              <input type="radio" name="reportGroup" value="all" checked>
+              <span>All groups</span>
+              <small>Regular + ODL</small>
+            </label>
+            <label class="report-radio">
+              <input type="radio" name="reportGroup" value="Regular">
+              <span>Regular only</span>
+            </label>
+            <label class="report-radio">
+              <input type="radio" name="reportGroup" value="ODL">
+              <span>ODL only</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="report-dialog-footer">
+          <button class="btn-ghost-dark" id="reportCancelBtn">Cancel</button>
+          <button class="btn-primary" id="reportGenerateBtn">
+            <span class="btn-label">Generate PDF</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ PRINT TEMPLATE (hidden on screen) ═══════════ -->
+  <div id="printRoot" class="print-root">
+    <div id="printContent"></div>
   </div>
 
 </body>
