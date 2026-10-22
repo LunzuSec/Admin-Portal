@@ -10,7 +10,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzB5TYa8Xbw5OT90Fh9UC3L
   document.head.appendChild(alt);
 })();
 
-const CACHE_KEY = 'lss_dashboard_cache_v9';
+const CACHE_KEY = 'lss_dashboard_cache_v10';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const TERM1_COLUMNS = ['SEPT', 'OCT', 'NOV', 'DEC', 'PAPER 1', 'PAPER 2', 'PAPER 3'];
@@ -96,7 +96,7 @@ function clearSkeletons() {
 
 const VIEW_TITLES = {
   overview:    { title: 'Overview', subtitle: 'Term 1 column-level submission progress' },
-  submissions: { title: 'Submissions', subtitle: 'Per-column submission detail for every class-subject' },
+  submissions: { title: 'Submissions', subtitle: 'Per-column fill and completion status' },
   teachers:    { title: 'Teachers', subtitle: 'Click a teacher to see their column-level progress' }
 };
 
@@ -403,7 +403,7 @@ function renderChart(summary) {
     const wrap = document.querySelector('.chart-wrap');
     if (wrap) {
       wrap.innerHTML = '<table style="width:100%;font-size:13px">' +
-        '<thead><tr><th>Class</th><th>7/7 ticked</th><th>Partial</th><th>Unticked</th><th>Empty</th></tr></thead>' +
+        '<thead><tr><th>Class</th><th>7/7 completed</th><th>Partial</th><th>Unticked</th><th>Empty</th></tr></thead>' +
         '<tbody>' + classes.map((c, i) =>
           `<tr><td>${c}</td><td>${all7[i]}</td><td>${partial[i]}</td><td>${none[i]}</td><td>${empty[i]}</td></tr>`
         ).join('') + '</tbody></table>';
@@ -419,10 +419,10 @@ function renderChart(summary) {
     data: {
       labels: classes,
       datasets: [
-        { label: '7/7 columns ticked', data: all7,    backgroundColor: '#4d6b3f' },
-        { label: 'Partial (1–6)',       data: partial, backgroundColor: '#b8860b' },
-        { label: 'Unticked',            data: none,    backgroundColor: '#a0522d' },
-        { label: 'Empty',               data: empty,   backgroundColor: '#6b7280' }
+        { label: '7/7 completed', data: all7,    backgroundColor: '#4d6b3f' },
+        { label: 'Partial (1–6)', data: partial, backgroundColor: '#b8860b' },
+        { label: 'Unticked',      data: none,    backgroundColor: '#a0522d' },
+        { label: 'Empty',         data: empty,   backgroundColor: '#6b7280' }
       ]
     },
     options: {
@@ -436,44 +436,49 @@ function renderChart(summary) {
   });
 }
 
-// ── Wide bar renderer (shared) ─────────────────────
+// ── Column bar renderer ─────────────────────────────
+//
+// One row per Term 1 column:
+//   [LABEL] [──────────── long bar ────────────] [X / Y (Z%)] [✓ Completed | In progress | Not started]
+//
+function renderColumnBar(label, cell) {
+  // cell = { ticked, count, total, percent } or null
+  const safeCell = cell || { ticked: false, count: 0, total: 0, percent: 0 };
+  const pct = Math.max(0, Math.min(100, safeCell.percent || 0));
+  const count = safeCell.count || 0;
+  const total = safeCell.total || 0;
+  const ticked = !!safeCell.ticked;
 
-function renderWideBar(label, cell) {
-  if (!cell) {
-    return `<div class="wide-bar-row">
-      <span class="wide-bar-label">${label}</span>
-      <div class="wide-bar-track"><div class="wide-bar-fill empty" style="width:0%"></div></div>
-      <span class="wide-bar-meta muted">— / —</span>
-    </div>`;
+  // Bar color: filled columns go green, empty go red, partial go amber
+  const barCls = pct === 0 ? 'empty' : pct < 100 ? 'partial' : '';
+
+  // Status pill:
+  //   ticked → "✓ Completed"    (green)
+  //   has fill, not ticked → "In progress"  (amber)
+  //   no fill, not ticked  → "Not started"  (red)
+  let statusCls, statusText;
+  if (ticked) {
+    statusCls = 'column-status-complete';
+    statusText = '✓ Completed';
+  } else if (count > 0) {
+    statusCls = 'column-status-partial';
+    statusText = 'In progress';
+  } else {
+    statusCls = 'column-status-empty';
+    statusText = 'Not started';
   }
-  const pct = cell.percent || 0;
-  const cls = pct === 0 ? 'empty' : pct < 100 ? 'partial' : '';
-  return `<div class="wide-bar-row">
-    <span class="wide-bar-label">${label}</span>
-    <div class="wide-bar-track">
-      <div class="wide-bar-fill ${cls}" style="width:${pct}%"></div>
+
+  return `<div class="column-bar-row">
+    <span class="column-bar-label">${label}</span>
+    <div class="column-bar-track">
+      <div class="column-bar-fill ${barCls}" style="width:${pct}%"></div>
     </div>
-    <span class="wide-bar-meta">
-      <strong>${cell.count}</strong> / ${cell.total}
+    <span class="column-bar-meta">
+      <strong>${count}</strong> / ${total}
       <span class="muted">(${pct}%)</span>
     </span>
+    <span class="column-status ${statusCls}">${statusText}</span>
   </div>`;
-}
-
-// ── Per-column checkbox pills ──────────────────────
-
-function renderColumnPill(label, cell) {
-  if (!cell) {
-    return `<span class="col-pill col-pill-empty" title="${label}">${label} —</span>`;
-  }
-  const ticked = !!cell.ticked;
-  const pct = cell.percent || 0;
-  const cls = ticked
-    ? 'col-pill-ticked'
-    : (pct > 0 ? 'col-pill-partial' : 'col-pill-empty');
-  const titleText = `${label}: ${cell.count}/${cell.total} students (${pct}%) · ${
-    ticked ? 'Teacher ticked' : 'Not ticked'}`;
-  return `<span class="col-pill ${cls}" title="${titleText}">${label} ${ticked ? '✓' : '—'}</span>`;
 }
 
 // ── Submissions ─────────────────────────────────────
@@ -488,8 +493,8 @@ function statusOf(row) {
 
 function statusLabel(row) {
   const t = row.term1.ticked;
-  if (t === 7) return '7/7 ticked';
-  if (t > 0) return `${t}/7 ticked`;
+  if (t === 7) return '7/7 completed';
+  if (t > 0) return `${t}/7 completed`;
   if (row.term1.totalScores > 0) return 'Unticked';
   return 'Not started';
 }
@@ -518,9 +523,16 @@ function renderSubmissions(data) {
     const sLabel = statusLabel(row);
     const sCls = statusOf(row);
 
-    const pills = TERM1_COLUMNS
-      .map(k => renderColumnPill(k, t1.columns[k]))
+    const bars = TERM1_COLUMNS
+      .map(k => renderColumnBar(k, t1.columns[k]))
       .join('');
+
+    // Overall bar: fraction of columns marked Completed (ticked)
+    const columnsCompleted = t1.ticked;
+    const overallPct = Math.round((columnsCompleted / 7) * 100);
+    const overallCls = columnsCompleted === 7 ? ''
+                     : columnsCompleted > 0   ? 'partial'
+                     : 'empty';
 
     card.innerHTML = `
       <div class="submission-head">
@@ -531,14 +543,14 @@ function renderSubmissions(data) {
         <span class="status-pill ${sCls}">${sLabel}</span>
       </div>
 
-      <div class="assignment-section-title">Term 1 columns — ticked status</div>
-      <div class="col-pill-row">${pills}</div>
+      <div class="assignment-section-title">Term 1 columns — entry progress</div>
+      <div class="column-bars">${bars}</div>
 
       <div class="overall-row">
-        <div class="overall-bar ${sCls}">
-          <div style="width:${Math.round((t1.ticked / 7) * 100)}%"></div>
+        <div class="overall-bar ${overallCls}">
+          <div style="width:${overallPct}%"></div>
         </div>
-        <span class="overall-value">${t1.ticked}/7 columns</span>
+        <span class="overall-value">${columnsCompleted}/7 completed</span>
       </div>
 
       <div class="submission-footer">
@@ -591,6 +603,7 @@ function renderTeachers(data) {
     const pct = row.possibleColumns
       ? Math.round((row.tickedColumns / row.possibleColumns) * 100)
       : 0;
+    const barCls = pct === 0 ? 'empty' : pct < 100 ? 'partial' : '';
 
     card.innerHTML = `
       <div class="teacher-head">
@@ -607,17 +620,17 @@ function renderTeachers(data) {
           <div class="teacher-stat-value">${row.assignments}</div>
         </div>
         <div class="teacher-stat">
-          <div class="teacher-stat-label">7/7 files</div>
+          <div class="teacher-stat-label">7/7 completed</div>
           <div class="teacher-stat-value good">${row.all7}</div>
         </div>
         <div class="teacher-stat">
-          <div class="teacher-stat-label">Columns ticked</div>
+          <div class="teacher-stat-label">Columns done</div>
           <div class="teacher-stat-value">${row.tickedColumns}</div>
         </div>
       </div>
 
       <div class="overall-row">
-        <div class="overall-bar ${pct === 0 ? 'empty' : pct < 100 ? 'partial' : ''}">
+        <div class="overall-bar ${barCls}">
           <div style="width:${pct}%"></div>
         </div>
         <span class="overall-value">${pct}%</span>
@@ -688,7 +701,7 @@ async function openTeacherModal(email) {
 
     document.getElementById('modalSummary').innerHTML =
       `<div class="modal-stat"><div class="modal-stat-label">Assignments</div><div class="modal-stat-value">${data.assignmentCount}</div></div>
-       <div class="modal-stat"><div class="modal-stat-label">Columns ticked</div><div class="modal-stat-value">${data.tickedColumns} / ${data.possibleColumns}</div></div>
+       <div class="modal-stat"><div class="modal-stat-label">Columns done</div><div class="modal-stat-value">${data.tickedColumns} / ${data.possibleColumns}</div></div>
        <div class="modal-stat"><div class="modal-stat-label">Avg fill</div><div class="modal-stat-value">${data.avgFillPercent}%</div></div>`;
 
     const hasRegular = data.assignments.some(a => a.group === 'Regular');
@@ -735,15 +748,16 @@ function renderModalAssignments() {
 function renderAssignmentCard(a) {
   const t1 = a.term1;
 
-  const pills = TERM1_COLUMNS
-    .map(k => renderColumnPill(k, t1.columns[k]))
+  const bars = TERM1_COLUMNS
+    .map(k => renderColumnBar(k, t1.columns[k]))
     .join('');
 
-  const sCls = t1.ticked === 7 ? 'complete'
-             : t1.ticked > 0   ? 'partial'
+  const columnsCompleted = t1.ticked;
+  const sCls = columnsCompleted === 7 ? 'complete'
+             : columnsCompleted > 0   ? 'partial'
              : 'empty';
-  const sLabel = t1.ticked === 7 ? '7/7 ticked'
-               : t1.ticked > 0   ? `${t1.ticked}/7 ticked`
+  const sLabel = columnsCompleted === 7 ? '7/7 completed'
+               : columnsCompleted > 0   ? `${columnsCompleted}/7 completed`
                : (t1.totalScores > 0 ? 'Unticked' : 'Not started');
 
   return `
@@ -752,15 +766,15 @@ function renderAssignmentCard(a) {
         <div>
           <div class="assignment-title">${a.class} — ${a.subject}</div>
           <div class="assignment-meta">
-            ${a.students} students · ${t1.ticked}/7 columns ticked
+            ${a.students} students · ${columnsCompleted}/7 columns completed
             <span class="status-pill ${sCls}" style="margin-left:8px">${sLabel}</span>
           </div>
         </div>
         <a href="${a.fileUrl}" target="_blank" rel="noopener">Open sheet →</a>
       </div>
 
-      <div class="assignment-section-title">Term 1 columns — ticked status</div>
-      <div class="col-pill-row">${pills}</div>
+      <div class="assignment-section-title">Term 1 columns — entry progress</div>
+      <div class="column-bars">${bars}</div>
     </div>`;
 }
 
@@ -782,7 +796,7 @@ function renderTeacherChart() {
         '<table style="width:100%;font-size:12px">' +
           '<thead><tr>' +
             '<th style="text-align:left;padding:6px">Class — Subject</th>' +
-            '<th style="text-align:right;padding:6px">Columns ticked</th>' +
+            '<th style="text-align:right;padding:6px">Columns completed</th>' +
             '<th style="text-align:right;padding:6px">Avg fill</th>' +
           '</tr></thead>' +
           '<tbody>' +
@@ -816,7 +830,7 @@ function renderTeacherChart() {
     data: {
       labels,
       datasets: [{
-        label: 'Columns ticked %',
+        label: 'Columns completed %',
         data: values,
         backgroundColor: colors,
         borderRadius: 4,
