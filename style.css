@@ -484,62 +484,78 @@ input:focus, select:focus {
 }
 .status-pill.complete { background: var(--good-bg); color: var(--good); }
 .status-pill.partial  { background: var(--warn-bg); color: var(--warn); }
+.status-pill.in-progress { background: var(--warn-bg); color: var(--warn); }
 .status-pill.empty    { background: var(--bad-bg);  color: var(--bad); }
 
-/* ═══ WIDE BARS ═══ */
-.wide-bars {
+/* ═══ COLUMN BARS (Term 1 per-column progress) ═══ */
+.column-bars {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 8px;
+  margin: 6px 0 4px;
 }
 
-.wide-bar-row {
+.column-bar-row {
   display: grid;
-  grid-template-columns: 70px 1fr 110px;
+  grid-template-columns: 78px 1fr 96px 104px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   font-size: 12px;
+  padding: 4px 0;
 }
 
-.wide-bar-label {
+.column-bar-label {
   font-weight: 700;
   color: var(--ink);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
 }
 
-.wide-bar-track {
-  height: 12px;
+.column-bar-track {
+  height: 14px;
   background: var(--border);
-  border-radius: 6px;
+  border-radius: 7px;
   overflow: hidden;
   position: relative;
+  min-width: 80px;
 }
 
-.wide-bar-fill {
+.column-bar-fill {
   height: 100%;
   background: var(--good);
-  border-radius: 6px;
+  border-radius: 7px;
   transition: width 0.4s ease;
 }
+.column-bar-fill.partial { background: var(--warn); }
+.column-bar-fill.empty   { background: var(--bad); }
 
-.wide-bar-fill.partial { background: var(--warn); }
-.wide-bar-fill.empty   { background: var(--bad); }
-
-.wide-bar-meta {
+.column-bar-meta {
   font-size: 11px;
   color: var(--ink-soft);
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-
-.wide-bar-meta strong {
+.column-bar-meta strong {
   color: var(--ink);
   font-weight: 700;
 }
+
+.column-status {
+  display: inline-block;
+  text-align: center;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.column-status-complete { background: var(--good-bg); color: var(--good); }
+.column-status-partial  { background: var(--warn-bg); color: var(--warn); }
+.column-status-empty    { background: var(--bad-bg);  color: var(--bad); }
 
 /* ═══ Overall row (used in submissions) ═══ */
 .overall-row {
@@ -845,7 +861,7 @@ input:focus, select:focus {
   letter-spacing: 1.5px;
   color: var(--muted);
   font-weight: 700;
-  margin-bottom: -6px;
+  margin-bottom: 6px;
 }
 
 /* ═══ SKELETONS ═══ */
@@ -1073,13 +1089,20 @@ input:focus, select:focus {
     width: 100%;
   }
 
-  .wide-bar-row {
-    grid-template-columns: 56px 1fr 96px;
-    gap: 8px;
+  /* Column bars on mobile: stack the status pill below */
+  .column-bar-row {
+    grid-template-columns: 60px 1fr 88px;
+    grid-template-areas:
+      "label track meta"
+      "label .     status";
+    row-gap: 4px;
+    column-gap: 8px;
     font-size: 11px;
   }
-  .wide-bar-label { font-size: 10px; }
-  .wide-bar-meta { font-size: 10px; }
+  .column-bar-label  { grid-area: label; font-size: 10px; }
+  .column-bar-track  { grid-area: track; }
+  .column-bar-meta   { grid-area: meta; font-size: 10px; }
+  .column-status     { grid-area: status; justify-self: end; font-size: 9px; padding: 2px 6px; }
 
   .modal { padding: 0; }
   .modal-content {
@@ -1102,48 +1125,4 @@ input:focus, select:focus {
   .assignment-card { padding: 14px 16px; }
   .assignment-title { font-size: 14px; }
   .assignment-meta { font-size: 11px; }
-}
-/* ═══ TERM 1 COLUMN PILLS ═══ */
-.col-pill-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 8px 0 12px;
-}
-
-.col-pill {
-  display: inline-block;
-  padding: 5px 10px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  border: 1px solid transparent;
-  white-space: nowrap;
-  font-family: Georgia, serif;
-}
-
-.col-pill-ticked {
-  background: var(--good-bg);
-  color: var(--good);
-  border-color: #cfe2c1;
-}
-
-.col-pill-partial {
-  background: var(--warn-bg);
-  color: var(--warn);
-  border-color: #ecd9a6;
-}
-
-.col-pill-empty {
-  background: var(--bad-bg);
-  color: var(--bad);
-  border-color: #ebd1bf;
-}
-
-@media (max-width: 900px) {
-  .col-pill {
-    font-size: 10px;
-    padding: 4px 8px;
-  }
 }
