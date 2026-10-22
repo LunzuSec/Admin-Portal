@@ -10,7 +10,6 @@
 </head>
 <body>
 
-  <!-- ═══ LOADING OVERLAY ═══ -->
   <div id="loadingOverlay" class="loading-overlay hidden">
     <div class="spinner">
       <div class="spinner-ring"></div>
@@ -19,7 +18,6 @@
     </div>
   </div>
 
-  <!-- ═══ MOBILE TOP BAR ═══ -->
   <header class="mobile-header">
     <button id="menuBtn" class="hamburger" aria-label="Open menu">
       <span></span><span></span><span></span>
@@ -32,7 +30,6 @@
 
   <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
 
-  <!-- ═══ SIDEBAR ═══ -->
   <aside class="sidebar" id="sidebar">
     <button id="sidebarClose" class="sidebar-close" aria-label="Close menu">×</button>
 
@@ -70,10 +67,8 @@
     </div>
   </aside>
 
-  <!-- ═══ MAIN ═══ -->
   <main class="main">
 
-    <!-- LOGIN -->
     <section id="loginPanel" class="login-screen">
       <div class="login-card">
         <div class="login-header">
@@ -105,13 +100,12 @@
       </div>
     </section>
 
-    <!-- DASHBOARD -->
     <section id="dashboard" class="dashboard hidden">
 
       <div class="topbar-inner">
         <div class="topbar-left">
           <h2 id="viewTitle">Overview</h2>
-          <p class="muted" id="viewSubtitle">Submission status across all classes</p>
+          <p class="muted" id="viewSubtitle">Term 1 column-level submission progress</p>
         </div>
         <div class="group-tabs" id="groupTabs">
           <button class="group-tab active" data-group="all">All</button>
@@ -120,7 +114,6 @@
         </div>
       </div>
 
-      <!-- OVERVIEW -->
       <div id="view-overview" class="view">
         <div class="kpi-strip">
           <div class="kpi-card">
@@ -129,26 +122,31 @@
             <div class="kpi-foot muted">across all classes</div>
           </div>
           <div class="kpi-card good">
-            <div class="kpi-label">Fully submitted</div>
-            <div class="kpi-value" id="kpiSubmitted"><span class="skeleton skeleton-text">000</span></div>
-            <div class="kpi-foot muted">ready for exams office</div>
+            <div class="kpi-label">7/7 ticked</div>
+            <div class="kpi-value" id="kpiAll7"><span class="skeleton skeleton-text">000</span></div>
+            <div class="kpi-foot muted">all Term 1 columns done</div>
           </div>
           <div class="kpi-card warn">
-            <div class="kpi-label">Partially submitted</div>
+            <div class="kpi-label">Partial</div>
             <div class="kpi-value" id="kpiPartial"><span class="skeleton skeleton-text">000</span></div>
-            <div class="kpi-foot muted">in progress</div>
+            <div class="kpi-foot muted">1–6 columns ticked</div>
           </div>
           <div class="kpi-card bad">
-            <div class="kpi-label">Not started</div>
+            <div class="kpi-label">Unticked</div>
+            <div class="kpi-value" id="kpiNone"><span class="skeleton skeleton-text">000</span></div>
+            <div class="kpi-foot muted">has scores, no ticks</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Empty</div>
             <div class="kpi-value" id="kpiEmpty"><span class="skeleton skeleton-text">000</span></div>
-            <div class="kpi-foot muted">no entries yet</div>
+            <div class="kpi-foot muted">no scores, no ticks</div>
           </div>
         </div>
 
         <div class="overview-grid">
           <div class="panel chart-panel">
             <div class="panel-head">
-              <h3>Progress by class</h3>
+              <h3>Columns ticked — by class</h3>
             </div>
             <div class="chart-wrap">
               <canvas id="classChart"></canvas>
@@ -160,24 +158,25 @@
               <h3>Quick stats</h3>
             </div>
             <div id="quickStats" class="quick-stats">
+              <div class="quick-stat"><span class="quick-stat-label">Term 1 ticks</span><span class="quick-stat-value" id="kpiTicked">–</span></div>
               <div class="quick-stat"><span class="quick-stat-label">Completion rate</span><span class="quick-stat-value" id="qsCompletion">–</span></div>
               <div class="quick-stat"><span class="quick-stat-label">Teachers</span><span class="quick-stat-value" id="qsTeachers">–</span></div>
-              <div class="quick-stat"><span class="quick-stat-label">Assignments</span><span class="quick-stat-value" id="qsAssignments">–</span></div>
+              <div class="quick-stat"><span class="quick-stat-label">Total columns</span><span class="quick-stat-value" id="qsAssignments">–</span></div>
               <div class="quick-stat"><span class="quick-stat-label">Academic year</span><span class="quick-stat-value" id="qsYear">–</span></div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- SUBMISSIONS -->
       <div id="view-submissions" class="view hidden">
         <div class="filter-bar">
           <input type="search" id="searchInput" placeholder="Search class or subject…">
           <select id="statusFilter">
             <option value="all">All statuses</option>
-            <option value="complete">Complete</option>
+            <option value="complete">7/7 ticked</option>
             <option value="partial">Partial</option>
-            <option value="empty">Not started</option>
+            <option value="in-progress">Unticked</option>
+            <option value="empty">Empty</option>
           </select>
         </div>
         <div id="submissionsList" class="submissions-list">
@@ -187,7 +186,6 @@
         </div>
       </div>
 
-      <!-- TEACHERS -->
       <div id="view-teachers" class="view hidden">
         <div class="filter-bar">
           <input type="search" id="teacherSearch" placeholder="Search teacher by name or email…">
@@ -202,7 +200,6 @@
     </section>
   </main>
 
-  <!-- ═══ TEACHER MODAL ═══ -->
   <div id="teacherModal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-head">
