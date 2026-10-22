@@ -1103,3 +1103,47 @@ input:focus, select:focus {
   .assignment-title { font-size: 14px; }
   .assignment-meta { font-size: 11px; }
 }
+/* ═══ TERM 1 COLUMN PILLS ═══ */
+.col-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.col-pill {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  font-family: Georgia, serif;
+}
+
+.col-pill-ticked {
+  background: var(--good-bg);
+  color: var(--good);
+  border-color: #cfe2c1;
+}
+
+.col-pill-partial {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: #ecd9a6;
+}
+
+.col-pill-empty {
+  background: var(--bad-bg);
+  color: var(--bad);
+  border-color: #ebd1bf;
+}
+
+@media (max-width: 900px) {
+  .col-pill {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+}
