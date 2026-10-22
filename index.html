@@ -102,15 +102,20 @@
 
     <section id="dashboard" class="dashboard hidden">
 
+      <!-- TOPBAR: two rows on mobile, one row on desktop -->
       <div class="topbar-inner">
-        <div class="topbar-left">
-          <h2 id="viewTitle">Overview</h2>
-          <p class="muted" id="viewSubtitle">Term 1 column-level submission progress</p>
-        </div>
-        <div class="topbar-right">
-          <button class="btn-report" id="reportBtn">
-            <span class="report-icon">⬇</span> Download Report
+        <div class="topbar-row topbar-row-1">
+          <div class="topbar-left">
+            <h2 id="viewTitle">Overview</h2>
+            <p class="muted" id="viewSubtitle">Term 1 column-level submission progress</p>
+          </div>
+          <button class="btn-report" id="reportBtn" aria-label="Download report">
+            <span class="report-icon">⬇</span>
+            <span class="report-label-long">Download Report</span>
+            <span class="report-label-short">Report</span>
           </button>
+        </div>
+        <div class="topbar-row topbar-row-2">
           <div class="group-tabs" id="groupTabs">
             <button class="group-tab active" data-group="all">All</button>
             <button class="group-tab" data-group="Regular">Regular</button>
@@ -324,7 +329,7 @@
     </div>
   </div>
 
-  <!-- ═══════════ PRINT TEMPLATE (hidden on screen) ═══════════ -->
+  <!-- ═══════════ PRINT TEMPLATE ═══════════ -->
   <div id="printRoot" class="print-root">
     <div id="printContent"></div>
   </div>
