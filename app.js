@@ -10,12 +10,10 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzB5TYa8Xbw5OT90Fh9UC3L
   document.head.appendChild(alt);
 })();
 
-const CACHE_KEY = 'lss_dashboard_cache_v10';
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_KEY = 'lss_dashboard_cache_v11';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const TERM1_COLUMNS = ['SEPT', 'OCT', 'NOV', 'DEC', 'PAPER 1', 'PAPER 2', 'PAPER 3'];
-const MONTHLY_COLUMNS = ['SEPT', 'OCT', 'NOV', 'DEC'];
-const PAPER_COLUMNS = ['PAPER 1', 'PAPER 2', 'PAPER 3'];
 
 const state = {
   apiUrl: API_URL,
@@ -30,7 +28,8 @@ const state = {
   teacherCache: new Map(),
   modalData: null,
   modalGroupTab: 'Regular',
-  modalView: 'summary'
+  modalView: 'summary',
+  pdfBusy: false
 };
 
 // ── Loading helpers ─────────────────────────────────
@@ -148,18 +147,18 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
   state.apiUrl = API_URL;
   state.apiToken = token;
   sessionStorage.setItem('lss_dashboard_token', token);
-  sessionStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(CACHE_KEY);
   await loadAll(true);
 });
 
 document.getElementById('logoutBtn').addEventListener('click', () => {
   sessionStorage.removeItem('lss_dashboard_token');
-  sessionStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(CACHE_KEY);
   location.reload();
 });
 
 document.getElementById('refreshBtn').addEventListener('click', () => {
-  sessionStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(CACHE_KEY);
   state.teacherCache.clear();
   loadAll(true);
 });
@@ -239,7 +238,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('statusFilter').addEventListener('change', filterSubmissions);
   document.getElementById('teacherSearch').addEventListener('input', filterTeachers);
 
-  // ── Report dialog wiring ──
+  // Report dialog
   document.getElementById('reportBtn').addEventListener('click', openReportDialog);
   document.getElementById('reportDialogClose').addEventListener('click', closeReportDialog);
   document.getElementById('reportCancelBtn').addEventListener('click', closeReportDialog);
@@ -247,16 +246,10 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('reportDialog').addEventListener('click', e => {
     if (e.target.id === 'reportDialog') closeReportDialog();
   });
-
-  // Show/hide the "column" field based on report type
   document.getElementById('reportTypeOptions').addEventListener('change', e => {
     const colField = document.getElementById('reportColumnField');
     const type = e.target.value;
-    if (type === 'teachers') {
-      colField.style.display = 'none';
-    } else {
-      colField.style.display = '';
-    }
+    colField.style.display = (type === 'teachers') ? 'none' : '';
   });
 });
 
@@ -270,35 +263,49 @@ async function loadAll(forceFresh) {
       state.submissions = c.submissions;
       state.teachers = c.teachers;
       renderAll();
-      setStatus('Loaded from cache', 'ready');
+      const age = Math.round((Date.now() - c.timestamp) / 60000);
+      setStatus(`Loaded from cache (${age}m old)`, 'ready');
+      setTimeout(() => backgroundRefresh(), 500);
       return;
     }
   }
 
-  setStatus('Loading…', 'loading');
+  setStatus('Loading summary…', 'loading');
   setStatusLoading(true);
   setButtonLoading('loginBtn', true);
   setButtonLoading('refreshBtn', true);
-  showOverlay('Loading dashboard…',
-    'Fetching data. First load may take a few minutes; subsequent loads are instant.');
+  showOverlay('Loading summary…',
+    'Fetching overview. Submissions and teachers will load in the background.');
 
   try {
-    const [summary, submissions, teachers] = await Promise.all([
-      fetchJSON('summary'),
+    state.summary = await fetchJSON('summary');
+    state.teachers = null;
+    state.submissions = null;
+    renderKpis(state.summary);
+    renderChart(state.summary);
+    renderQuickStats(state.summary);
+    document.getElementById('loginPanel').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    clearSkeletons();
+    setStatus('Summary ready · loading details…', 'loading');
+    hideOverlay();
+
+    const [subs, teachers] = await Promise.all([
       fetchJSON('submissions'),
       fetchJSON('teachers')
     ]);
-    state.summary = summary;
-    state.submissions = submissions;
+    state.submissions = subs;
     state.teachers = teachers;
 
+    renderSubmissions(state.submissions);
+    renderTeachers(state.teachers);
+    renderQuickStats(state.summary);
+
     writeCache();
-    renderAll();
-    const note = summary.cached ? 'server cache' : 'fresh';
+    const note = state.summary.cached ? 'server cache' : 'fresh';
     setStatus('Connected · ' + note, 'ready');
   } catch (err) {
     const isLoginScreen = !document.getElementById('loginPanel').classList.contains('hidden');
-
     if (isLoginScreen && err.message === 'unauthorized') {
       const errorEl = document.getElementById('loginError');
       errorEl.textContent = 'Incorrect password. Please try again.';
@@ -318,6 +325,26 @@ async function loadAll(forceFresh) {
     setButtonLoading('loginBtn', false);
     setButtonLoading('refreshBtn', false);
     hideOverlay();
+  }
+}
+
+async function backgroundRefresh() {
+  try {
+    const [summary, subs, teachers] = await Promise.all([
+      fetchJSON('summary'),
+      fetchJSON('submissions'),
+      fetchJSON('teachers')
+    ]);
+    state.summary = summary;
+    state.submissions = subs;
+    state.teachers = teachers;
+    writeCache();
+    renderSubmissions(state.submissions);
+    renderTeachers(state.teachers);
+    renderQuickStats(state.summary);
+    setStatus('Refreshed · ' + (summary.cached ? 'server cache' : 'fresh'), 'ready');
+  } catch (e) {
+    // Silent — cache stays authoritative
   }
 }
 
@@ -347,11 +374,11 @@ async function fetchJSON(action) {
 
 function readCache() {
   try {
-    const raw = sessionStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const d = JSON.parse(raw);
     if (Date.now() - d.timestamp > CACHE_TTL_MS) {
-      sessionStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(CACHE_KEY);
       return null;
     }
     return d;
@@ -359,7 +386,7 @@ function readCache() {
 }
 function writeCache() {
   try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
       timestamp: Date.now(),
       summary: state.summary,
       submissions: state.submissions,
@@ -397,7 +424,8 @@ function renderQuickStats(summary) {
     ? Math.round((t.totalTicked / t.totalPossibleTicks) * 100)
     : 0;
   document.getElementById('qsCompletion').textContent = pct + '%';
-  document.getElementById('qsYear').textContent = summary.academicYear || '—';
+  document.getElementById('qsYear').textContent =
+    (summary.academicYear || '—') + ' · Term 1';
 
   const teachersData = state.teachers;
   if (teachersData && teachersData.rows) {
@@ -517,6 +545,11 @@ function renderSubmissions(data) {
   if (!container) return;
   container.innerHTML = '';
 
+  if (!data || !data.rows) {
+    container.innerHTML = '<p class="muted">Loading submissions…</p>';
+    return;
+  }
+
   const filtered = data.rows
     .filter(r => state.activeGroup === 'all' || r.group === state.activeGroup)
     .sort((a, b) => a.class.localeCompare(b.class) || a.subject.localeCompare(b.subject));
@@ -592,6 +625,11 @@ function renderTeachers(data) {
   const container = document.getElementById('teachersList');
   if (!container) return;
   container.innerHTML = '';
+
+  if (!data || !data.rows) {
+    container.innerHTML = '<p class="muted">Loading teachers…</p>';
+    return;
+  }
 
   const filtered = data.rows.slice().sort((a, b) => a.teacherName.localeCompare(b.teacherName));
 
@@ -899,7 +937,7 @@ function closeTeacherModal() {
 }
 
 // ═══════════════════════════════════════════════════
-// PDF REPORT — download via browser print
+// PDF REPORT — server-side generation
 // ═══════════════════════════════════════════════════
 
 function openReportDialog() {
@@ -908,277 +946,67 @@ function openReportDialog() {
   document.getElementById('reportColumnOptions').querySelector('input[value="all"]').checked = true;
   document.getElementById('reportGroupOptions').querySelector('input[value="all"]').checked = true;
   document.getElementById('reportColumnField').style.display = '';
+  document.getElementById('reportGenerateBtn').disabled = false;
+  document.getElementById('reportGenerateBtn').querySelector('.btn-label').textContent = 'Generate PDF';
 }
 
 function closeReportDialog() {
+  if (state.pdfBusy) return;
   document.getElementById('reportDialog').classList.add('hidden');
 }
 
-function generateReport() {
-  const type = document.querySelector('input[name="reportType"]:checked').value;
+async function generateReport() {
+  if (state.pdfBusy) return;
+
+  const type      = document.querySelector('input[name="reportType"]:checked').value;
   const colChoice = document.querySelector('input[name="reportColumn"]:checked').value;
-  const group = document.querySelector('input[name="reportGroup"]:checked').value;
+  const group     = document.querySelector('input[name="reportGroup"]:checked').value;
 
-  const columns = colChoice === 'monthly' ? MONTHLY_COLUMNS
-                : colChoice === 'papers'  ? PAPER_COLUMNS
-                : TERM1_COLUMNS;
+  state.pdfBusy = true;
+  const btn = document.getElementById('reportGenerateBtn');
+  btn.disabled = true;
+  btn.querySelector('.btn-label').textContent = 'Generating…';
 
-  const colLabel = colChoice === 'monthly' ? 'Monthly (SEPT, OCT, NOV, DEC)'
-                 : colChoice === 'papers'  ? 'Papers (PAPER 1, PAPER 2, PAPER 3)'
-                 : 'All columns';
+  try {
+    const url = `${state.apiUrl}?action=pdf` +
+                `&type=${encodeURIComponent(type)}` +
+                `&columns=${encodeURIComponent(colChoice)}` +
+                `&group=${encodeURIComponent(group)}` +
+                `&token=${encodeURIComponent(state.apiToken)}`;
 
-  const groupLabel = group === 'all' ? 'Regular + ODL' : group;
+    const res = await fetch(url);
+    const txt = await res.text();
+    let json;
+    try { json = JSON.parse(txt); }
+    catch (e) { throw new Error('Server returned invalid response.'); }
 
-  closeReportDialog();
+    if (json.error) throw new Error(json.error);
+    if (!json.base64) throw new Error('No PDF returned.');
 
-  if (type === 'submissions') {
-    buildSubmissionsReport(columns, colLabel, groupLabel, group);
-  } else {
-    buildTeachersReport(columns, colLabel, groupLabel, group);
+    // Decode base64 to bytes and trigger download
+    const binStr = atob(json.base64);
+    const bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+
+    const dlUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = dlUrl;
+    a.download = json.filename || `report_${Date.now()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(dlUrl), 1000);
+
+    setStatus('PDF downloaded · ' + (json.filename || ''), 'ready');
+    closeReportDialog();
+  } catch (e) {
+    alert('Failed to generate PDF: ' + e.message);
+  } finally {
+    state.pdfBusy = false;
+    btn.disabled = false;
+    btn.querySelector('.btn-label').textContent = 'Generate PDF';
   }
-
-  // Let the DOM update, then trigger print
-  setTimeout(() => {
-    runPrint();
-  }, 100);
-}
-
-// ── Report builders ─────────────────────────────────
-
-function reportHeaderHtml(subtitle, filters) {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-GB', {
-    day: '2-digit', month: 'long', year: 'numeric'
-  });
-  const timeStr = now.toLocaleTimeString('en-GB', {
-    hour: '2-digit', minute: '2-digit'
-  });
-
-  return `
-    <div class="print-header">
-      <div class="print-header-left">
-        <div class="print-school">Lunzu Secondary School</div>
-        <div class="print-dept">Examination Department</div>
-        <div class="print-subtitle">${subtitle}</div>
-      </div>
-      <div class="print-header-right">
-        <div class="print-date">Generated: ${dateStr} · ${timeStr}</div>
-        <div class="print-year">Academic Year ${state.summary?.academicYear || ''} · Term ${state.summary?.activeTerm || 1}</div>
-      </div>
-    </div>
-    <div class="print-filters">
-      <span><strong>Filters:</strong></span>
-      <span>Group: <strong>${filters.groupLabel}</strong></span>
-      <span>Columns: <strong>${filters.colLabel}</strong></span>
-    </div>
-    <hr class="print-rule">
-  `;
-}
-
-function reportFooterHtml() {
-  return `
-    <div class="print-footer">
-      <div>Lunzu Secondary School — Examination Department · Confidential</div>
-      <div>Generated from the Admin Dashboard on ${new Date().toLocaleString('en-GB')}</div>
-    </div>
-  `;
-}
-
-// Build a compact bar-and-status row for print
-function printColumnRow(label, cell) {
-  const safeCell = cell || { ticked: false, count: 0, total: 0, percent: 0 };
-  const pct = Math.max(0, Math.min(100, safeCell.percent || 0));
-  const count = safeCell.count || 0;
-  const total = safeCell.total || 0;
-  const ticked = !!safeCell.ticked;
-
-  let statusText, statusCls;
-  if (ticked) {
-    statusText = '✓ Completed';
-    statusCls = 'print-status-complete';
-  } else if (count > 0) {
-    statusText = 'In progress';
-    statusCls = 'print-status-partial';
-  } else {
-    statusText = 'Not started';
-    statusCls = 'print-status-empty';
-  }
-
-  return `
-    <tr class="print-col-row">
-      <td class="print-col-label">${label}</td>
-      <td class="print-col-bar-cell">
-        <div class="print-bar-track">
-          <div class="print-bar-fill ${pct === 0 ? 'empty' : pct < 100 ? 'partial' : ''}" style="width:${pct}%"></div>
-        </div>
-      </td>
-      <td class="print-col-meta">
-        <strong>${count}</strong> / ${total} <span class="print-muted">(${pct}%)</span>
-      </td>
-      <td class="print-col-status ${statusCls}">${statusText}</td>
-    </tr>
-  `;
-}
-
-function buildSubmissionsReport(columns, colLabel, groupLabel, group) {
-  const rows = state.submissions.rows
-    .filter(r => group === 'all' || r.group === group)
-    .sort((a, b) => a.class.localeCompare(b.class) || a.subject.localeCompare(b.subject));
-
-  const totalFiles = rows.length;
-  const totalCompleted = rows.reduce((s, r) => s + r.term1.ticked, 0);
-  const possible = rows.length * 7;
-
-  const blocks = rows.map(row => {
-    const columnRows = columns
-      .map(k => printColumnRow(k, row.term1.columns[k]))
-      .join('');
-
-    const columnsCompleted = row.term1.ticked;
-    const sLabel = columnsCompleted === 7 ? '7/7 completed'
-                 : columnsCompleted > 0   ? `${columnsCompleted}/7 completed`
-                 : (row.term1.totalScores > 0 ? 'Unticked' : 'Not started');
-    const sCls = columnsCompleted === 7 ? 'complete'
-               : columnsCompleted > 0   ? 'partial'
-               : 'empty';
-
-    return `
-      <div class="print-file-block">
-        <div class="print-file-head">
-          <div class="print-file-title">${row.class} — ${row.subject}</div>
-          <div class="print-file-stats">
-            <span>${row.students} students</span>
-            <span class="print-pill ${sCls}">${sLabel}</span>
-          </div>
-        </div>
-        <table class="print-col-table">
-          <thead>
-            <tr>
-              <th>Column</th>
-              <th>Progress</th>
-              <th>Entered</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>${columnRows}</tbody>
-        </table>
-      </div>
-    `;
-  }).join('');
-
-  const html = `
-    <div class="print-page">
-      ${reportHeaderHtml('Submissions Report', { groupLabel, colLabel })}
-      <div class="print-summary">
-        <div class="print-summary-item">
-          <div class="print-summary-value">${totalFiles}</div>
-          <div class="print-summary-label">Files</div>
-        </div>
-        <div class="print-summary-item">
-          <div class="print-summary-value">${totalCompleted} / ${possible}</div>
-          <div class="print-summary-label">Columns completed</div>
-        </div>
-        <div class="print-summary-item">
-          <div class="print-summary-value">${possible ? Math.round((totalCompleted / possible) * 100) : 0}%</div>
-          <div class="print-summary-label">Overall completion</div>
-        </div>
-      </div>
-      ${blocks}
-      ${reportFooterHtml()}
-    </div>
-  `;
-
-  document.getElementById('printContent').innerHTML = html;
-}
-
-function buildTeachersReport(columns, colLabel, groupLabel, group) {
-  // Filter assignments by group; sum ticked counts per teacher
-  const teacherRows = state.teachers.rows
-    .slice()
-    .sort((a, b) => a.teacherName.localeCompare(b.teacherName));
-
-  const blocks = teacherRows.map(t => {
-    // For each teacher, we need the per-file assignment detail.
-    // The teachers list endpoint only gives aggregate totals;
-    // we don't have per-file detail on teachers view (it requires
-    // an extra fetch per teacher). For the print report, we show
-    // a summary table per teacher with their aggregate stats.
-    const pct = t.possibleColumns
-      ? Math.round((t.tickedColumns / t.possibleColumns) * 100)
-      : 0;
-    const sCls = t.all7 === t.assignments ? 'complete'
-               : t.tickedColumns > 0      ? 'partial'
-               : 'empty';
-
-    return `
-      <div class="print-file-block">
-        <div class="print-file-head">
-          <div class="print-file-title">${t.teacherName}</div>
-          <div class="print-file-stats">
-            <span>${t.teacherEmail}</span>
-            <span class="print-pill ${sCls}">${pct}% overall</span>
-          </div>
-        </div>
-        <table class="print-col-table print-teacher-table">
-          <thead>
-            <tr>
-              <th>Assignments</th>
-              <th>7/7 completed</th>
-              <th>Partial</th>
-              <th>Unticked</th>
-              <th>Empty</th>
-              <th>Columns done</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>${t.assignments}</td>
-              <td>${t.all7}</td>
-              <td>${t.partial}</td>
-              <td>${t.none}</td>
-              <td>${t.empty}</td>
-              <td><strong>${t.tickedColumns}</strong> / ${t.possibleColumns}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    `;
-  }).join('');
-
-  const totalTicked = teacherRows.reduce((s, t) => s + t.tickedColumns, 0);
-  const totalPossible = teacherRows.reduce((s, t) => s + t.possibleColumns, 0);
-
-  const html = `
-    <div class="print-page">
-      ${reportHeaderHtml('Teachers Report', { groupLabel, colLabel: 'N/A (aggregate)' })}
-      <div class="print-summary">
-        <div class="print-summary-item">
-          <div class="print-summary-value">${teacherRows.length}</div>
-          <div class="print-summary-label">Teachers</div>
-        </div>
-        <div class="print-summary-item">
-          <div class="print-summary-value">${totalTicked} / ${totalPossible}</div>
-          <div class="print-summary-label">Columns done</div>
-        </div>
-        <div class="print-summary-item">
-          <div class="print-summary-value">${totalPossible ? Math.round((totalTicked / totalPossible) * 100) : 0}%</div>
-          <div class="print-summary-label">Overall completion</div>
-        </div>
-      </div>
-      ${blocks}
-      ${reportFooterHtml()}
-    </div>
-  `;
-
-  document.getElementById('printContent').innerHTML = html;
-}
-
-function runPrint() {
-  document.body.classList.add('printing');
-  window.print();
-  setTimeout(() => {
-    document.body.classList.remove('printing');
-  }, 300);
 }
 
 // ── Utilities ───────────────────────────────────────
