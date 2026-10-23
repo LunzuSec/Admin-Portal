@@ -238,7 +238,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('statusFilter').addEventListener('change', filterSubmissions);
   document.getElementById('teacherSearch').addEventListener('input', filterTeachers);
 
-  // Report dialog
+  // Report dialog wiring
   document.getElementById('reportBtn').addEventListener('click', openReportDialog);
   document.getElementById('reportDialogClose').addEventListener('click', closeReportDialog);
   document.getElementById('reportCancelBtn').addEventListener('click', closeReportDialog);
@@ -737,7 +737,7 @@ async function openTeacherModal(email) {
       const res = await fetch(url);
       const txt = await res.text();
       data = JSON.parse(txt);
-      if (data.error) throw new Error(data.error);
+      if (data.error) throw new Error(data.message || data.error);
       state.teacherCache.set(email, data);
     }
 
@@ -938,6 +938,7 @@ function closeTeacherModal() {
 
 // ═══════════════════════════════════════════════════
 // PDF REPORT — server-side generation
+// Shows ACTUAL server-side error message to the user.
 // ═══════════════════════════════════════════════════
 
 function openReportDialog() {
@@ -975,15 +976,45 @@ async function generateReport() {
                 `&token=${encodeURIComponent(state.apiToken)}`;
 
     const res = await fetch(url);
+
+    // Read raw text first — the server may return HTML (e.g. a
+    // Google error page when the deployment itself is broken),
+    // not just JSON.
     const txt = await res.text();
-    let json;
-    try { json = JSON.parse(txt); }
-    catch (e) { throw new Error('Server returned invalid response.'); }
 
-    if (json.error) throw new Error(json.error);
-    if (!json.base64) throw new Error('No PDF returned.');
+    let json = null;
+    try {
+      json = JSON.parse(txt);
+    } catch (e) {
+      // Not JSON — the deployment is broken or returning an HTML error.
+      const preview = (txt || '').replace(/\s+/g, ' ').slice(0, 400);
+      throw new Error(
+        'Server returned non-JSON response (HTTP ' + res.status + ').\n\n' +
+        'First 400 chars:\n' + preview + '\n\n' +
+        'Most likely causes:\n' +
+        '  1. You edited Code.gs / WebAPI.gs but did not redeploy as a new version.\n' +
+        '  2. The deployment URL in app.js is stale.\n' +
+        '  3. The Apps Script project has a syntax error — open the editor to check.'
+      );
+    }
 
-    // Decode base64 to bytes and trigger download
+    // Server returned JSON — surface the ACTUAL message, not just "server_error".
+    if (json.error) {
+      const parts = [json.error];
+      if (json.message) parts.push(json.message);
+      if (json.stack)   parts.push('\n\nStack:\n' + json.stack);
+      throw new Error(parts.join(': '));
+    }
+
+    if (!json.base64) {
+      throw new Error(
+        'PDF endpoint returned no base64 payload.\n\n' +
+        'Response keys: ' + Object.keys(json).join(', ') + '\n\n' +
+        'This usually means generateReportPdf was not defined (missing Code.gs section).'
+      );
+    }
+
+    // Decode base64 → bytes → download
     const binStr = atob(json.base64);
     const bytes = new Uint8Array(binStr.length);
     for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
@@ -1001,7 +1032,10 @@ async function generateReport() {
     setStatus('PDF downloaded · ' + (json.filename || ''), 'ready');
     closeReportDialog();
   } catch (e) {
-    alert('Failed to generate PDF: ' + e.message);
+    const msg = e.message || String(e);
+    alert('Failed to generate PDF:\n\n' + msg);
+    // Also log to console so the exact server response can be inspected
+    console.error('PDF generation failed:', e);
   } finally {
     state.pdfBusy = false;
     btn.disabled = false;
