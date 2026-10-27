@@ -277,7 +277,6 @@ body {
     justify-content: space-between;
     gap: 16px;
   }
-
   .topbar-row-1 {
     display: flex;
     flex: 1;
@@ -286,13 +285,11 @@ body {
     gap: 16px;
     min-width: 0;
   }
-
   .topbar-row-2 {
     display: flex;
     flex-shrink: 0;
     align-items: center;
   }
-
   .topbar-left { min-width: 0; }
   .btn-report { margin: 0; flex-shrink: 0; }
   .group-tabs { margin: 0; flex-shrink: 0; }
@@ -999,17 +996,57 @@ input:focus, select:focus {
 .small { font-size: 11px; }
 .hidden { display: none; }
 
-/* ═══ REPORT DIALOG ═══ */
+/* ══════════════════════════════════════════════════
+   REPORT DIALOG — bottom-sheet structure
+   Header (fixed) · Body (scrollable) · Footer (fixed)
+   ══════════════════════════════════════════════════ */
+
 .report-dialog-content {
   max-width: 620px;
   background: var(--panel);
   border-radius: 14px;
-  overflow: visible;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+  padding: 0;
 }
-.report-dialog-body { padding: 24px 28px 24px; }
+
+.report-dialog-content .modal-head {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 3;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-dialog-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 24px 28px 0;
+}
+
+.report-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  padding: 16px 28px 20px;
+  border-radius: 0 0 14px 14px;
+}
 
 .report-field { margin-bottom: 20px; }
+.report-field:last-of-type { margin-bottom: 4px; }
+
 .report-label {
   display: block;
   font-size: 11px;
@@ -1130,15 +1167,6 @@ input:focus, select:focus {
   color: var(--ink);
 }
 
-.report-dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  border-top: 1px solid var(--border);
-  margin-top: 8px;
-  padding-top: 20px;
-}
-
 /* ═══ HIDE MOBILE CHROME ON DESKTOP ═══ */
 .mobile-header,
 .sidebar-backdrop,
@@ -1222,9 +1250,11 @@ input:focus, select:focus {
     flex-wrap: nowrap;
   }
   .topbar-row-1 {
-    display: flex; align-items: flex-start;
+    display: flex;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 10px; width: 100%;
+    gap: 10px;
+    width: 100%;
   }
   .topbar-row-2 { display: flex; align-items: center; width: 100%; }
   .topbar-left { flex: 1; min-width: 0; }
@@ -1298,21 +1328,54 @@ input:focus, select:focus {
   .assignment-card { padding: 14px 16px; }
   .assignment-title { font-size: 14px; }
   .assignment-meta { font-size: 11px; }
-  .report-dialog-content {
-    max-width: 100%;
-    height: auto;
-    max-height: 92vh;
-    border-radius: 12px 12px 0 0;
-    margin-top: auto;
-    margin-bottom: 0;
-    align-self: flex-end;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-  }
+
+  /* ═══ REPORT DIALOG — mobile bottom sheet ═══ */
   .modal:has(.report-dialog-content) {
     place-items: end center;
   }
-  .report-dialog-body { padding: 20px 20px 20px; }
+  .report-dialog-content {
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    max-height: 92vh;
+    border-radius: 14px 14px 0 0;
+    margin: 0;
+    align-self: flex-end;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .report-dialog-content .modal-head {
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    z-index: 3;
+    padding: 14px 20px;
+  }
+  .report-dialog-body {
+    padding: 20px 20px 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .report-dialog-footer {
+    flex-shrink: 0;
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 20px max(16px, env(safe-area-inset-bottom));
+    border-radius: 0;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+  }
+  .report-dialog-footer .btn-ghost-dark,
+  .report-dialog-footer .btn-primary {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 44px;
+    font-size: 14px;
+  }
   .report-options,
   .report-options-2,
   .report-options-3,
@@ -1322,22 +1385,6 @@ input:focus, select:focus {
   .report-radio { padding: 12px 14px; }
   .report-chips { gap: 5px; }
   .chip { font-size: 11px; padding: 5px 10px; }
-  .report-dialog-footer {
-    flex-direction: column-reverse;
-    gap: 8px;
-  }
-  .report-dialog-footer .btn-ghost-dark,
-  .report-dialog-footer .btn-primary {
-    width: 100%;
-  }
-
-  /* Topbar containment — prevents the report button overflowing */
-  .topbar-row-1 { overflow: hidden; }
-
-  /* Any stray modal child outside .modal-content stays hidden */
-  .modal > *:not(.modal-content) {
-    display: none;
-  }
 }
 
 @media (max-width: 360px) {
@@ -1347,10 +1394,7 @@ input:focus, select:focus {
   .btn-report { padding: 8px 10px; }
 }
 
-/* ═══ ABSOLUTE HIDE — anything with .hidden must never render ═══
-   This rule must come last so it overrides ALL other display rules,
-   including any mobile media query that might try to re-show an
-   element with class="hidden". */
+/* ═══ ABSOLUTE HIDE — must come last ═══ */
 .hidden,
 .hidden * {
   display: none !important;
