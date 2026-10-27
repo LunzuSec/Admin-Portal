@@ -246,10 +246,42 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('reportDialog').addEventListener('click', e => {
     if (e.target.id === 'reportDialog') closeReportDialog();
   });
+
+  // Toggle chips
+  document.getElementById('reportColumnChips').addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    chip.classList.toggle('active');
+  });
+
+  // Quick picks
+  document.querySelectorAll('.quickpick').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const preset = btn.dataset.preset;
+      const chips = document.querySelectorAll('#reportColumnChips .chip');
+      chips.forEach(c => c.classList.remove('active'));
+
+      if (preset === 'monthly') {
+        chips.forEach(c => {
+          if (['SEPT','OCT','NOV','DEC'].includes(c.dataset.col)) c.classList.add('active');
+        });
+      } else if (preset === 'papers') {
+        chips.forEach(c => {
+          if (['PAPER 1','PAPER 2','PAPER 3'].includes(c.dataset.col)) c.classList.add('active');
+        });
+      } else if (preset === 'all') {
+        chips.forEach(c => c.classList.add('active'));
+      }
+      // 'none' leaves everything unselected
+    });
+  });
+
+  // Hide column + status filters when Teachers report is selected
   document.getElementById('reportTypeOptions').addEventListener('change', e => {
-    const colField = document.getElementById('reportColumnField');
     const type = e.target.value;
-    colField.style.display = (type === 'teachers') ? 'none' : '';
+    const hide = (type === 'teachers');
+    document.getElementById('reportColumnField').style.display = hide ? 'none' : '';
+    document.getElementById('reportStatusField').style.display = hide ? 'none' : '';
   });
 });
 
@@ -937,16 +969,27 @@ function closeTeacherModal() {
 }
 
 // ═══════════════════════════════════════════════════
-// PDF REPORT — server-side generation
-// Shows ACTUAL server-side error message to the user.
+// PDF REPORT — Server-side generation
 // ═══════════════════════════════════════════════════
 
 function openReportDialog() {
   document.getElementById('reportDialog').classList.remove('hidden');
-  document.getElementById('reportTypeOptions').querySelector('input[value="submissions"]').checked = true;
-  document.getElementById('reportColumnOptions').querySelector('input[value="all"]').checked = true;
-  document.getElementById('reportGroupOptions').querySelector('input[value="all"]').checked = true;
+
+  // Reset defaults
+  document.getElementById('reportTypeOptions')
+    .querySelector('input[value="submissions"]').checked = true;
+  document.getElementById('reportStatusOptions')
+    .querySelector('input[value="all"]').checked = true;
+  document.getElementById('reportGroupOptions')
+    .querySelector('input[value="all"]').checked = true;
+
+  // Default chips: everything selected
+  document.querySelectorAll('#reportColumnChips .chip').forEach(c => c.classList.add('active'));
+
+  // Show column + status filters
   document.getElementById('reportColumnField').style.display = '';
+  document.getElementById('reportStatusField').style.display = '';
+
   document.getElementById('reportGenerateBtn').disabled = false;
   document.getElementById('reportGenerateBtn').querySelector('.btn-label').textContent = 'Generate PDF';
 }
@@ -959,9 +1002,21 @@ function closeReportDialog() {
 async function generateReport() {
   if (state.pdfBusy) return;
 
-  const type      = document.querySelector('input[name="reportType"]:checked').value;
-  const colChoice = document.querySelector('input[name="reportColumn"]:checked').value;
-  const group     = document.querySelector('input[name="reportGroup"]:checked').value;
+  const type   = document.querySelector('input[name="reportType"]:checked').value;
+  const status = document.querySelector('input[name="reportStatus"]:checked').value;
+  const group  = document.querySelector('input[name="reportGroup"]:checked').value;
+
+  let columns = [];
+  document.querySelectorAll('#reportColumnChips .chip.active').forEach(c => {
+    columns.push(c.dataset.col);
+  });
+
+  if (type === 'teachers') {
+    columns = ['all'];
+  } else if (columns.length === 0) {
+    alert('Please select at least one column.');
+    return;
+  }
 
   state.pdfBusy = true;
   const btn = document.getElementById('reportGenerateBtn');
@@ -971,70 +1026,40 @@ async function generateReport() {
   try {
     const url = `${state.apiUrl}?action=pdf` +
                 `&type=${encodeURIComponent(type)}` +
-                `&columns=${encodeURIComponent(colChoice)}` +
+                `&status=${encodeURIComponent(status)}` +
+                `&columns=${encodeURIComponent(columns.join(','))}` +
                 `&group=${encodeURIComponent(group)}` +
                 `&token=${encodeURIComponent(state.apiToken)}`;
 
     const res = await fetch(url);
-
-    // Read raw text first — the server may return HTML (e.g. a
-    // Google error page when the deployment itself is broken),
-    // not just JSON.
     const txt = await res.text();
 
-    let json = null;
-    try {
-      json = JSON.parse(txt);
-    } catch (e) {
-      // Not JSON — the deployment is broken or returning an HTML error.
-      const preview = (txt || '').replace(/\s+/g, ' ').slice(0, 400);
-      throw new Error(
-        'Server returned non-JSON response (HTTP ' + res.status + ').\n\n' +
-        'First 400 chars:\n' + preview + '\n\n' +
-        'Most likely causes:\n' +
-        '  1. You edited Code.gs / WebAPI.gs but did not redeploy as a new version.\n' +
-        '  2. The deployment URL in app.js is stale.\n' +
-        '  3. The Apps Script project has a syntax error — open the editor to check.'
-      );
+    let json;
+    try { json = JSON.parse(txt); }
+    catch (e) {
+      throw new Error('Server returned invalid response (HTTP ' + res.status + ').');
     }
 
-    // Server returned JSON — surface the ACTUAL message, not just "server_error".
     if (json.error) {
-      const parts = [json.error];
-      if (json.message) parts.push(json.message);
-      if (json.stack)   parts.push('\n\nStack:\n' + json.stack);
-      throw new Error(parts.join(': '));
+      throw new Error(json.message ? `${json.error}: ${json.message}` : json.error);
+    }
+    if (!json.url) {
+      throw new Error('PDF endpoint returned no URL.');
     }
 
-    if (!json.base64) {
-      throw new Error(
-        'PDF endpoint returned no base64 payload.\n\n' +
-        'Response keys: ' + Object.keys(json).join(', ') + '\n\n' +
-        'This usually means generateReportPdf was not defined (missing Code.gs section).'
-      );
-    }
-
-    // Decode base64 → bytes → download
-    const binStr = atob(json.base64);
-    const bytes = new Uint8Array(binStr.length);
-    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
-    const blob = new Blob([bytes], { type: 'application/pdf' });
-
-    const dlUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = dlUrl;
-    a.download = json.filename || `report_${Date.now()}.pdf`;
+    a.href = json.url;
+    a.download = json.filename || 'report.pdf';
+    a.target = '_blank';
+    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(dlUrl), 1000);
 
     setStatus('PDF downloaded · ' + (json.filename || ''), 'ready');
     closeReportDialog();
   } catch (e) {
-    const msg = e.message || String(e);
-    alert('Failed to generate PDF:\n\n' + msg);
-    // Also log to console so the exact server response can be inspected
+    alert('Failed to generate PDF:\n\n' + (e.message || String(e)));
     console.error('PDF generation failed:', e);
   } finally {
     state.pdfBusy = false;
