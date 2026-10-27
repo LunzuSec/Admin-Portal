@@ -257,62 +257,83 @@
       </div>
 
       <div class="report-dialog-body">
-        <p class="muted" style="margin:0 0 18px;">
-          Choose what to include in the PDF report. The PDF will download directly to your device.
+        <p class="muted" style="margin:0 0 14px;">
+          The PDF downloads directly to your device.
         </p>
 
         <div class="report-field">
-          <label class="report-label">Report type</label>
-          <div class="report-options" id="reportTypeOptions">
+          <label class="report-label">Report</label>
+          <div class="report-options report-options-2" id="reportTypeOptions">
             <label class="report-radio">
               <input type="radio" name="reportType" value="submissions" checked>
               <span>Submissions</span>
-              <small>Per class-subject column progress</small>
+              <small>Per class-subject</small>
             </label>
             <label class="report-radio">
               <input type="radio" name="reportType" value="teachers">
               <span>Teachers</span>
-              <small>Per teacher column breakdown</small>
+              <small>Per teacher</small>
+            </label>
+          </div>
+        </div>
+
+        <div class="report-field" id="reportStatusField">
+          <label class="report-label">Show files that are</label>
+          <div class="report-options report-options-4" id="reportStatusOptions">
+            <label class="report-radio">
+              <input type="radio" name="reportStatus" value="all" checked>
+              <span>All</span>
+            </label>
+            <label class="report-radio">
+              <input type="radio" name="reportStatus" value="completed">
+              <span>✓ Completed</span>
+            </label>
+            <label class="report-radio">
+              <input type="radio" name="reportStatus" value="partial">
+              <span>In progress</span>
+            </label>
+            <label class="report-radio">
+              <input type="radio" name="reportStatus" value="empty">
+              <span>Not started</span>
             </label>
           </div>
         </div>
 
         <div class="report-field" id="reportColumnField">
-          <label class="report-label">Which columns?</label>
-          <div class="report-options" id="reportColumnOptions">
-            <label class="report-radio">
-              <input type="radio" name="reportColumn" value="all" checked>
-              <span>All columns</span>
-              <small>SEPT + OCT + NOV + DEC + P1 + P2 + P3</small>
-            </label>
-            <label class="report-radio">
-              <input type="radio" name="reportColumn" value="monthly">
-              <span>Monthly only</span>
-              <small>SEPT · OCT · NOV · DEC</small>
-            </label>
-            <label class="report-radio">
-              <input type="radio" name="reportColumn" value="papers">
-              <span>Papers only</span>
-              <small>PAPER 1 · PAPER 2 · PAPER 3</small>
-            </label>
+          <label class="report-label">Columns to include</label>
+
+          <div class="report-chips" id="reportColumnChips">
+            <button type="button" class="chip" data-col="SEPT">SEPT</button>
+            <button type="button" class="chip" data-col="OCT">OCT</button>
+            <button type="button" class="chip" data-col="NOV">NOV</button>
+            <button type="button" class="chip" data-col="DEC">DEC</button>
+            <button type="button" class="chip" data-col="PAPER 1">PAPER 1</button>
+            <button type="button" class="chip" data-col="PAPER 2">PAPER 2</button>
+            <button type="button" class="chip" data-col="PAPER 3">PAPER 3</button>
+          </div>
+
+          <div class="report-quickpicks">
+            <button type="button" class="quickpick" data-preset="monthly">All months</button>
+            <button type="button" class="quickpick" data-preset="papers">All papers</button>
+            <button type="button" class="quickpick" data-preset="all">Everything</button>
+            <button type="button" class="quickpick" data-preset="none">Clear</button>
           </div>
         </div>
 
         <div class="report-field">
           <label class="report-label">Group</label>
-          <div class="report-options" id="reportGroupOptions">
+          <div class="report-options report-options-3" id="reportGroupOptions">
             <label class="report-radio">
               <input type="radio" name="reportGroup" value="all" checked>
               <span>All groups</span>
-              <small>Regular + ODL</small>
             </label>
             <label class="report-radio">
               <input type="radio" name="reportGroup" value="Regular">
-              <span>Regular only</span>
+              <span>Regular</span>
             </label>
             <label class="report-radio">
               <input type="radio" name="reportGroup" value="ODL">
-              <span>ODL only</span>
+              <span>ODL</span>
             </label>
           </div>
         </div>
