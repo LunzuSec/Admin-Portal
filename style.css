@@ -1005,6 +1005,7 @@ input:focus, select:focus {
   background: var(--panel);
   border-radius: 14px;
   overflow: visible;
+  display: block;
 }
 .report-dialog-body { padding: 24px 28px 24px; }
 
@@ -1068,7 +1069,7 @@ input:focus, select:focus {
   line-height: 1.3;
 }
 
-/* ═══ Report dialog — column chips & filters ═══ */
+/* ═══ Report chips & quickpicks ═══ */
 .report-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1329,6 +1330,14 @@ input:focus, select:focus {
   .report-dialog-footer .btn-primary {
     width: 100%;
   }
+
+  /* Topbar containment — prevents the report button overflowing */
+  .topbar-row-1 { overflow: hidden; }
+
+  /* Any stray modal child outside .modal-content stays hidden */
+  .modal > *:not(.modal-content) {
+    display: none;
+  }
 }
 
 @media (max-width: 360px) {
@@ -1336,4 +1345,16 @@ input:focus, select:focus {
   .topbar-left h2 { font-size: 18px; }
   .report-label-short { display: none; }
   .btn-report { padding: 8px 10px; }
+}
+
+/* ═══ ABSOLUTE HIDE — anything with .hidden must never render ═══
+   This rule must come last so it overrides ALL other display rules,
+   including any mobile media query that might try to re-show an
+   element with class="hidden". */
+.hidden,
+.hidden * {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
