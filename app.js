@@ -275,14 +275,6 @@ window.addEventListener('DOMContentLoaded', () => {
       // 'none' leaves everything unselected
     });
   });
-
-  // Hide column + status filters when Teachers report is selected
-  document.getElementById('reportTypeOptions').addEventListener('change', e => {
-    const type = e.target.value;
-    const hide = (type === 'teachers');
-    document.getElementById('reportColumnField').style.display = hide ? 'none' : '';
-    document.getElementById('reportStatusField').style.display = hide ? 'none' : '';
-  });
 });
 
 // ── Data loading ────────────────────────────────────
@@ -986,10 +978,6 @@ function openReportDialog() {
   // Default chips: everything selected
   document.querySelectorAll('#reportColumnChips .chip').forEach(c => c.classList.add('active'));
 
-  // Show column + status filters
-  document.getElementById('reportColumnField').style.display = '';
-  document.getElementById('reportStatusField').style.display = '';
-
   document.getElementById('reportGenerateBtn').disabled = false;
   document.getElementById('reportGenerateBtn').querySelector('.btn-label').textContent = 'Generate PDF';
 }
@@ -1011,9 +999,7 @@ async function generateReport() {
     columns.push(c.dataset.col);
   });
 
-  if (type === 'teachers') {
-    columns = ['all'];
-  } else if (columns.length === 0) {
+  if (columns.length === 0) {
     alert('Please select at least one column.');
     return;
   }
